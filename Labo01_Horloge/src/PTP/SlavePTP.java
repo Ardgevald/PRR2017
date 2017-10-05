@@ -17,7 +17,7 @@ import java.util.logging.Logger;
  *
  * @author Remi
  */
-public class MasterPTP {
+public class SlavePTP {
 
     private static final int BROADCAST_PORT = 1234;
     private static final String GROUP_ADDRESS = "228.5.6.7";
@@ -53,13 +53,13 @@ public class MasterPTP {
 		*/
 		
 	    } catch (IOException ex) {
-		Logger.getLogger(MasterPTP.class.getName()).log(Level.SEVERE, null, ex);
+		Logger.getLogger(SlavePTP.class.getName()).log(Level.SEVERE, null, ex);
 	    }
 	}
     };
     private final Timer syncTimer = new Timer();
 
-    public MasterPTP() throws SocketException, IOException {
+    public SlavePTP() throws SocketException, IOException {
 	//Diffusion des messages sync et followup
 	syncTimer.scheduleAtFixedRate(syncTask, 0, SYNC_PERIOD);
     }

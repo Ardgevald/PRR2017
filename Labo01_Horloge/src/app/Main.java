@@ -10,7 +10,7 @@ public class Main {
     */
    public static void main(String[] args) throws IOException {
       // TODO code application logic here
-      new PTP.MasterPTP();
+      new PTP.SlavePTP();
       
    }
    
