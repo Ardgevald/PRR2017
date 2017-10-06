@@ -1,4 +1,4 @@
-package PTPSlave;
+package PTP;
 
 import java.io.Console;
 import java.io.IOException;
@@ -7,6 +7,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.logging.Level;
@@ -25,11 +26,9 @@ public class SlavePTP {
 
    private static final int BUFFER_SIZE = 2;
 
-   private Boolean running = true;
+   private InetAddress masterAddress;
 
-   private TimerTask syncTask = new TimerTask() {
-
-      private byte id = 0;
+   private final TimerTask syncTask = new TimerTask() {
 
       @Override
       public void run() {
@@ -46,17 +45,27 @@ public class SlavePTP {
          try {
 
             byte[] buffer = new byte[BUFFER_SIZE];
+            byte id;
 
             socket = new MulticastSocket(BROADCAST_PORT);
-            socket.setSoTimeout(TIMEOUT);
             InetAddress group = InetAddress.getByName(GROUP_ADDRESS);
             socket.joinGroup(group);
+            
+            DatagramPacket paquet = new DatagramPacket(buffer, BUFFER_SIZE);
 
-            while (running) {
+            do {
                // wait for Master
-               DatagramPacket paquet = new DatagramPacket(buffer, BUFFER_SIZE);
+               
                socket.receive(paquet);
-            }
+
+               if (paquet.getLength() == 2 && paquet.getData()[0] == 0) {
+                  id = paquet.getData()[1];
+                  masterAddress = paquet.getAddress();
+               }
+            } while (masterAddress == null);
+            
+            // Wait for FollowUp
+            socket.receive(paquet);
 
          } catch (IOException ex) {
             Logger.getLogger(SlavePTP.class.getName()).log(Level.SEVERE, null, ex);
@@ -80,7 +89,6 @@ public class SlavePTP {
    @Override
    protected void finalize() throws Throwable {
       super.finalize();
-      running = false;
       sync.join();
    }
 
