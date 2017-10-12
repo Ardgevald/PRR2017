@@ -5,7 +5,7 @@
  */
 package app;
 
-import PTPSlave.SlavePTP;
+import PTP.SlavePTP;
 import java.io.IOException;
 
 /**
