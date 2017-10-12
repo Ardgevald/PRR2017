@@ -32,6 +32,7 @@ public class SlavePTP {
 
       @Override
       public void run() {
+         
 
       }
    };
@@ -55,7 +56,6 @@ public class SlavePTP {
 
             do {
                // wait for Master
-               
                socket.receive(paquet);
 
                if (paquet.getLength() == 2 && paquet.getData()[0] == 0) {
@@ -66,6 +66,9 @@ public class SlavePTP {
             
             // Wait for FollowUp
             socket.receive(paquet);
+            
+            if(paquet.getLength() == 2 && paquet.getData()[0] ==)
+            
 
          } catch (IOException ex) {
             Logger.getLogger(SlavePTP.class.getName()).log(Level.SEVERE, null, ex);
