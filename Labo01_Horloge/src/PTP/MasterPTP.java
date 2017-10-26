@@ -99,7 +99,7 @@ public class MasterPTP {
 		}
 	});
 
-	public MasterPTP() throws SocketException, IOException {
+	public MasterPTP() throws IOException {
 		//Diffusion des messages sync et followup
 		syncTimer.scheduleAtFixedRate(syncTask, 0, SYNC_PERIOD);
 
@@ -107,4 +107,9 @@ public class MasterPTP {
 		delayRequestThread.start();
 	}
 
+	public static void main(String ... args ) throws IOException{
+		MasterPTP masterPTP = new MasterPTP();
+		
+	}
+	
 }
