@@ -48,7 +48,7 @@ public class MasterPTP {
 				// FOLLOW_UP  {1, time, id}
 				System.out.println("Sending follow_up");
 				long time = System.currentTimeMillis();
-				byte[] followUpData = ByteBuffer.allocate(2 + Long.BYTES).put(id).putLong(time).array();
+				byte[] followUpData = ByteBuffer.allocate(2 + Long.BYTES).put((byte) 1).put(id).putLong(time).array();
 				packet = new DatagramPacket(followUpData, followUpData.length, group, SYNC_PORT);
 				broadcastSocket.send(packet);
 				System.out.println("Follow_up sent (" + id + ")");
