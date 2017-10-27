@@ -1,59 +1,130 @@
 package PTP.messages;
 
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.LinkedList;
+import util.ByteLongConverter;
+
 /**
  *
  * @author Remi
  */
 public abstract class Message {
-    
-    public Message(byte messageType){
-	this.messageType = messageType;
-    }
-    
-    private byte messageType;
-    private byte[] fullData;
-    
-    
-    public byte[] getBytes(){
-	return fullData;
-    }
-    
-    public class SyncMessage extends Message{
+
+	private final byte id;
 	
-	public SyncMessage(byte messageType) {
-	    super((byte)0);
+	private static final int BUFFER_SIZE = 20;
+
+	private final MessageType messageType;
+
+	protected final ByteBuffer byteBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+
+	public byte[] getBytes() {
+		return byteBuffer.array();
 	}
+
 	
-    }
-    
-    public abstract class IdMessage extends Message{
-	private int id;
-	
-	public IdMessage(byte messageType, int id){
-	    super(messageType);
-	    this.id = id;
+	public enum MessageType {
+		SyncMessage, FollowUpMessage, DelayRequest, DelayResponse;
+
+		public byte getByteValue() {
+			return (byte) this.ordinal();
+		}
 	}
-    }
-    
-    public class FollowUpMessage extends IdMessage{
-	
-	public FollowUpMessage(int id) {
-	    super((byte)1, id);
+
+	public Message(MessageType messageType, byte id) {
+		this.messageType = messageType;
+		this.id = id;
+
+		byteBuffer.put(messageType.getByteValue());
+		byteBuffer.put(id);
 	}
-	
-    }
-    
-    public class DelayRequestMessage extends Message{
-	public DelayRequestMessage() {
-	    super((byte) 2);
+
+	public static Message parse(byte[] array) throws Exception {
+		MessageType type = MessageType.values()[array[0]];
+
+		byte id = array[1];
+		long time;
+
+		switch (type) {
+			case SyncMessage:
+				return new SyncMessage(id);
+			case FollowUpMessage:
+				time = ByteLongConverter.bytesToLong(Arrays.copyOfRange(array, 2, array.length));
+
+				return new FollowUpMessage(id, time);
+			case DelayRequest:
+				return new DelayRequestMessage(id);
+			case DelayResponse:
+				time = ByteLongConverter.bytesToLong(Arrays.copyOfRange(array, 2, array.length));
+
+				return new DelayResponseMessage(id, time);
+		}
+
+		throw new Exception("Unable to parse, bytes: " + Arrays.toString(array));
 	}
-    }
-    
-    public class DelayResponseMessage extends IdMessage{	
-	public DelayResponseMessage(int id) {
-	    super((byte) 3, id);
+
+	public byte getId() {
+		return id;
 	}
+
+	public MessageType getMessageType() {
+		return messageType;
+	}
+
 	
-    }
-    
+	
+	
+	// CHILD MESSAGES -------
+	public static class SyncMessage extends Message {
+
+		public SyncMessage(byte id) {
+			super(MessageType.SyncMessage, id);
+		}
+
+	}
+
+	public static class FollowUpMessage extends Message {
+
+		private final long time;
+
+		public FollowUpMessage(byte id, long time) {
+			super(MessageType.FollowUpMessage, id);
+			this.time = time;
+
+			byteBuffer.putLong(time);
+		}
+
+		public long getTime() {
+			return time;
+		}
+
+	}
+
+	public static class DelayRequestMessage extends Message {
+
+		public DelayRequestMessage(byte id) {
+			super(MessageType.FollowUpMessage, id);
+		}
+	}
+
+	public static class DelayResponseMessage extends Message {
+
+		private final long time;
+
+		public DelayResponseMessage(byte id, long time) {
+			super(MessageType.DelayResponse, id);
+
+			this.time = time;
+			byteBuffer.putLong(time);
+		}
+
+		public long getTime() {
+			return time;
+		}
+		
+		
+
+	}
+
 }
