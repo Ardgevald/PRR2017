@@ -15,6 +15,8 @@ import java.util.logging.Logger;
 import util.ByteLongConverter;
 
 import static util.Protocol.*;
+import static util.Protocol.MessageStruct.*;
+import static util.Protocol.MessageType.*;
 
 /**
  * Représente un maître PTP
@@ -57,7 +59,7 @@ public class SlavePTP {
 				System.out.println("sending unicast DELAY_REQUEST");
 				unicastSocket = new DatagramSocket();
 
-				byte[] buffer = {2, ++delayId};
+				byte[] buffer = {DELAY_REQUEST.asByte(), ++delayId};
 				DatagramPacket paquet = new DatagramPacket(buffer, buffer.length, masterAddress, DELAY_PORT);
 
 				long slaveTime = System.currentTimeMillis();
@@ -71,12 +73,14 @@ public class SlavePTP {
 				paquet = new DatagramPacket(buffer, buffer.length);
 				unicastSocket.receive(paquet);
 
-				if (paquet.getData()[0] == 3 && paquet.getData()[1] == delayId) {
+				if (paquet.getData()[ID.ordinal()] == DELAY_REQUEST.asByte()
+						&& paquet.getData()[TYPE.ordinal()] == delayId) {
+
 					long masterTime = ByteLongConverter.bytesToLong(Arrays.copyOfRange(paquet.getData(), 2 * Byte.BYTES, paquet.getLength()));
 					System.out.println("delay : " + masterTime + " - " + slaveTime);
 					delay = (masterTime - slaveTime) / 2;
 				}
-				
+
 				System.out.println("response received");
 
 			} catch (SocketException ex) {
@@ -121,8 +125,8 @@ public class SlavePTP {
 			// wait for Master
 			socket.receive(paquet);
 
-			if (paquet.getLength() == 2 && paquet.getData()[0] == 0) {
-				id = paquet.getData()[1];
+			if (paquet.getLength() == 2 && paquet.getData()[TYPE.ordinal()] == SYNC.asByte()) {
+				id = paquet.getData()[ID.ordinal()];
 				masterAddress = paquet.getAddress();
 			}
 		} while (masterAddress == null);
@@ -130,7 +134,10 @@ public class SlavePTP {
 		// Wait for FollowUp
 		socket.receive(paquet);
 
-		if (paquet.getLength() == Long.BYTES + 2 * Byte.BYTES && paquet.getData()[0] == 1 && paquet.getData()[1] == id) {
+		if (paquet.getLength() == Long.BYTES + 2 * Byte.BYTES
+				&& paquet.getData()[TYPE.ordinal()] == FOLLOW_UP.asByte()
+				&& paquet.getData()[ID.ordinal()] == id) {
+			
 			byte[] masterTime = Arrays.copyOfRange(paquet.getData(), 2 * Byte.BYTES, paquet.getLength());
 			gap = ByteLongConverter.bytesToLong(masterTime) - System.currentTimeMillis();
 		}
