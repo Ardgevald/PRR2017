@@ -13,6 +13,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static util.Protocol.*;
+import static util.Protocol.MessageStruct.*;
+import static util.Protocol.MessageType.*;
 
 /**
  * Représente un maître PTP
@@ -34,7 +36,7 @@ public class MasterPTP {
 			try {
 				// SYNC
 				System.out.println("Sending sync");
-				byte[] syncData = {0, id};
+				byte[] syncData = {SYNC.asByte(), id};
 
 				DatagramPacket packet = new DatagramPacket(syncData, syncData.length, group, SYNC_PORT);
 				
@@ -51,7 +53,7 @@ public class MasterPTP {
 				// FOLLOW_UP  {1, time, id}
 				System.out.println("Sending follow_up");
 				
-				byte[] followUpData = ByteBuffer.allocate(2 + Long.BYTES).put((byte) 1).put(id).putLong(time).array();
+				byte[] followUpData = ByteBuffer.allocate(2 + Long.BYTES).put(FOLLOW_UP.asByte()).put(id).putLong(time).array();
 				packet = new DatagramPacket(followUpData, followUpData.length, group, SYNC_PORT);
 				broadcastSocket.send(packet);
 				System.out.println("Follow_up sent (" + id + ")");
@@ -87,16 +89,17 @@ public class MasterPTP {
 						Logger.getLogger(MasterPTP.class.getName()).log(Level.SEVERE, null, ex);
 					}
 					/*/
+					
 					long time = System.currentTimeMillis();
 
 					InetAddress address = packet.getAddress();
 					int port = packet.getPort();
-					byte type = packet.getData()[0];
-					byte id = packet.getData()[1];
+					byte type = packet.getData()[TYPE.ordinal()];
+					byte id = packet.getData()[ID.ordinal()];
 
-					if (type == 2) {
+					if (type == DELAY_REQUEST.asByte()) {
 						System.out.println("Delay request received");
-						byte[] delayResponseBuffer = ByteBuffer.allocate(2 + Long.BYTES).put((byte) 3).put(id).putLong(time).array();
+						byte[] delayResponseBuffer = ByteBuffer.allocate(2 + Long.BYTES).put(DELAY_RESPONSE.asByte()).put(id).putLong(time).array();
 						packet = new DatagramPacket(delayResponseBuffer, delayResponseBuffer.length, address, port);
 						socket.send(packet);
 						System.out.println("Delay response sent");
