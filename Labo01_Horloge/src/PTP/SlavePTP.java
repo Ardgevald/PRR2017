@@ -26,8 +26,6 @@ public class SlavePTP {
 
 	private static final int TIMEOUT = 4000;
 
-	private static final int BUFFER_SIZE = 16;
-
 	private long gap;
 	private long delay;
 
@@ -55,6 +53,8 @@ public class SlavePTP {
 		public void run() {
 
 			try {
+
+				// ---------------- DELAY_REQUEST - envoi - {DELAY_REQ, id}
 				System.out.println("sending unicast DELAY_REQUEST");
 				unicastSocket = new DatagramSocket();
 
@@ -65,7 +65,8 @@ public class SlavePTP {
 				System.out.println("sent at time : " + slaveTime);
 				unicastSocket.send(paquet);
 
-				buffer = new byte[BUFFER_SIZE];
+				// ---------------- DELAY_RESPONSE - réception - {DELAY_REQ, id}
+				buffer = new byte[2 + Long.BYTES];
 
 				System.out.println("receiving unicast DELAY_RESPONSE");
 
@@ -136,7 +137,7 @@ public class SlavePTP {
 		if (paquet.getLength() == Long.BYTES + 2 * Byte.BYTES
 				&& paquet.getData()[TYPE.ordinal()] == FOLLOW_UP.asByte()
 				&& paquet.getData()[ID.ordinal()] == id) {
-			
+
 			byte[] masterTime = Arrays.copyOfRange(paquet.getData(), 2 * Byte.BYTES, paquet.getLength());
 			gap = ByteLongConverter.bytesToLong(masterTime) - System.currentTimeMillis();
 		}
