@@ -2,6 +2,7 @@ package PTP;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 import java.net.SocketException;
@@ -13,6 +14,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import util.ByteLongConverter;
 
+import static util.Protocol.*;
+
 /**
  * Représente un maître PTP
  *
@@ -20,19 +23,20 @@ import util.ByteLongConverter;
  */
 public class SlavePTP {
 
-	private static final int BROADCAST_PORT = 1234;
-	private static final String GROUP_ADDRESS = "234.56.78.9";
 	private static final int TIMEOUT = 4000;
 
 	private static final int BUFFER_SIZE = 16;
 
 	private long gap;
 	private long delay;
-	
+
 	private boolean stop;
+
+	private byte delayId = 0;
 
 	private InetAddress masterAddress;
 	private MulticastSocket socket;
+	private DatagramSocket unicastSocket;
 
 	public SlavePTP() throws SocketException, IOException {
 		this.gap = 0;
@@ -48,39 +52,66 @@ public class SlavePTP {
 
 		@Override
 		public void run() {
-			System.out.println(String.format("gap: %d  delay: %d", gap, delay));
-			
-			delay = 2;
-			// do things
-			delayTimer.schedule(new TaskSchedule(), (4 + new Random().nextInt(57)) * 1000);
+
+			try {
+				System.out.println("sending unicast DELAY_REQUEST");
+				unicastSocket = new DatagramSocket();
+
+				byte[] buffer = {2, ++delayId};
+				DatagramPacket paquet = new DatagramPacket(buffer, buffer.length, masterAddress, DELAY_PORT);
+
+				long slaveTime = System.currentTimeMillis();
+				System.out.println("sent at time : " + slaveTime);
+				unicastSocket.send(paquet);
+
+				buffer = new byte[BUFFER_SIZE];
+
+				System.out.println("receiving unicast DELAY_RESPONSE");
+
+				paquet = new DatagramPacket(buffer, buffer.length);
+				unicastSocket.receive(paquet);
+
+				if (paquet.getData()[0] == 3 && paquet.getData()[1] == delayId) {
+					long masterTime = ByteLongConverter.bytesToLong(Arrays.copyOfRange(paquet.getData(), 2 * Byte.BYTES, paquet.getLength()));
+					System.out.println("delay : " + masterTime + " - " + slaveTime);
+					delay = (masterTime - slaveTime) / 2;
+				}
+				
+				System.out.println("response received");
+
+			} catch (SocketException ex) {
+				Logger.getLogger(SlavePTP.class.getName()).log(Level.SEVERE, null, ex);
+			} catch (IOException ex) {
+				Logger.getLogger(SlavePTP.class.getName()).log(Level.SEVERE, null, ex);
+			}
+
+			System.out.println(String.format("DELAY_REQUEST_RESPONSE : gap: %d  delay: %d", gap, delay));
+			delayTimer.schedule(new TaskSchedule(), (4 + new Random().nextInt(57)) * SYNC_PERIOD);
 		}
 	};
 
 	private final Thread sync = new Thread(() -> {
 		try {
-
 			waitSync();
 
 			// start delay management
 			delayTimer.schedule(new TaskSchedule(), 0);
 
 			// continuer waitSync en continu
-			while (!stop){
+			while (!stop) {
 				waitSync();
 			}
-			
+
 		} catch (IOException ex) {
 			Logger.getLogger(SlavePTP.class.getName()).log(Level.SEVERE, null, ex);
 		}
 	});
 
 	private void waitSync() throws IOException {
-		System.out.println(String.format("gap: %d  delay: %d", gap, delay));
-
 		byte[] buffer = new byte[BUFFER_SIZE];
 		Byte id = null;
 
-		socket = new MulticastSocket(BROADCAST_PORT);
+		socket = new MulticastSocket(SYNC_PORT);
 		InetAddress group = InetAddress.getByName(GROUP_ADDRESS);
 		socket.joinGroup(group);
 
@@ -100,9 +131,11 @@ public class SlavePTP {
 		socket.receive(paquet);
 
 		if (paquet.getLength() == Long.BYTES + 2 * Byte.BYTES && paquet.getData()[0] == 1 && paquet.getData()[1] == id) {
-			byte[] gapByte = Arrays.copyOfRange(paquet.getData(), 2 * Byte.BYTES, paquet.getLength());
-			gap = ByteLongConverter.bytesToLong(gapByte) - System.currentTimeMillis();
+			byte[] masterTime = Arrays.copyOfRange(paquet.getData(), 2 * Byte.BYTES, paquet.getLength());
+			gap = ByteLongConverter.bytesToLong(masterTime) - System.currentTimeMillis();
 		}
+
+		System.out.println(String.format("SYNC : gap: %d  delay: %d", gap, delay));
 	}
 
 	private void startThread() {
@@ -112,8 +145,8 @@ public class SlavePTP {
 	public long getTimeSynced() {
 		return System.currentTimeMillis() + delay + gap;
 	}
-	
-	public void close(){
+
+	public void close() {
 		stop = true;
 	}
 }
