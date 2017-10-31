@@ -12,6 +12,8 @@ import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static util.Protocol.*;
+
 /**
  * Représente un maître PTP
  *
@@ -19,17 +21,12 @@ import java.util.logging.Logger;
  */
 public class MasterPTP {
 
-	private static final int SYNC_PORT = 1234;
-	private static final int DELAY_PORT = 1235;
-	private static final String GROUP_ADDRESS = "234.56.78.9";
-	private static final long SYNC_PERIOD = 4000;
-
 	private final Timer syncTimer = new Timer();
 
 	private TimerTask syncTask = new TimerTask() {
 
 		private byte id = 0;
-		private MulticastSocket broadcastSocket = new MulticastSocket(SYNC_PORT);
+		private MulticastSocket broadcastSocket = new MulticastSocket();
 		private InetAddress group = InetAddress.getByName(GROUP_ADDRESS);
 
 		@Override
@@ -40,6 +37,12 @@ public class MasterPTP {
 				byte[] syncData = {0, id};
 
 				DatagramPacket packet = new DatagramPacket(syncData, syncData.length, group, SYNC_PORT);
+				
+				//*
+				long time = System.currentTimeMillis();
+				/*/
+				long time = System.currentTimeMillis() + 10000;
+				//*/
 				broadcastSocket.send(packet);
 
 				System.out.println("Sync sent");
@@ -47,7 +50,7 @@ public class MasterPTP {
 				// ----------------
 				// FOLLOW_UP  {1, time, id}
 				System.out.println("Sending follow_up");
-				long time = System.currentTimeMillis();
+				
 				byte[] followUpData = ByteBuffer.allocate(2 + Long.BYTES).put((byte) 1).put(id).putLong(time).array();
 				packet = new DatagramPacket(followUpData, followUpData.length, group, SYNC_PORT);
 				broadcastSocket.send(packet);
@@ -76,18 +79,27 @@ public class MasterPTP {
 					DatagramPacket packet = new DatagramPacket(delayRequestBuffer, 2);
 					System.out.println("Waiting for delay request...");
 					socket.receive(packet);
+
+					/*
+					try {
+						Thread.sleep(2000);
+					} catch (InterruptedException ex) {
+						Logger.getLogger(MasterPTP.class.getName()).log(Level.SEVERE, null, ex);
+					}
+					/*/
 					long time = System.currentTimeMillis();
 
 					InetAddress address = packet.getAddress();
+					int port = packet.getPort();
 					byte type = packet.getData()[0];
 					byte id = packet.getData()[1];
 
-					if (type == 3) {
+					if (type == 2) {
 						System.out.println("Delay request received");
-						byte[] delayResponseBuffer = ByteBuffer.allocate(2 + Long.BYTES).put((byte) 4).putLong(time).put(id).array();
-						packet = new DatagramPacket(delayResponseBuffer, delayResponseBuffer.length, address, SYNC_PORT);
+						byte[] delayResponseBuffer = ByteBuffer.allocate(2 + Long.BYTES).put((byte) 3).put(id).putLong(time).array();
+						packet = new DatagramPacket(delayResponseBuffer, delayResponseBuffer.length, address, port);
 						socket.send(packet);
-						System.out.println("Delay response sent to " + type);
+						System.out.println("Delay response sent");
 					}
 
 				} while (toContinue);
