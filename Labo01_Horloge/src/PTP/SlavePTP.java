@@ -19,9 +19,8 @@ import static util.Protocol.MessageStruct.*;
 import static util.Protocol.MessageType.*;
 
 /**
- * Représente un maître PTP
+ * Représente un esclave PTP, dont l'heure est synchronisée à un maitre sur le réseau
  *
- * @author Remi
  */
 public class SlavePTP {
 

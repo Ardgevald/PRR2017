@@ -17,10 +17,12 @@ import static util.Protocol.MessageStruct.*;
 import static util.Protocol.MessageType.*;
 
 /**
- * Représente un maître PTP
- *
+ * Représente un maître PTP, dont l'heure est envoyée à des esclaves sur le réseau,
+ * qui se synchroniseront
  */
 public class MasterPTP {
+
+	private boolean toContinue = true; // Afin de pouvoir arrêter les threads
 
 	// Timer lancé tous les 'Protocol.SYNC_PERIOD' 
 	// On y diffuse les sync et les follow up en multicast
@@ -87,7 +89,6 @@ public class MasterPTP {
 
 		@Override
 		public void run() {
-			boolean toContinue = true; // Afin de pouvoir arrêter le thread
 			try {
 				do {
 					// ---------------- DELAY_REQUEST - réception - {DELAY_REQ, id}
@@ -120,7 +121,7 @@ public class MasterPTP {
 						InetAddress address = packet.getAddress();
 						int port = packet.getPort();
 						byte id = packet.getData()[ID.ordinal()];
-						
+
 						// --> Création du packet DELAY_RESPONSE
 						byte[] delayResponseBuffer = ByteBuffer.allocate(2 + Long.BYTES)
 								.put(DELAY_RESPONSE.asByte())
