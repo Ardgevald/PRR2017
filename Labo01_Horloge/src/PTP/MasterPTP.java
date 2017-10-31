@@ -19,46 +19,52 @@ import static util.Protocol.MessageType.*;
 /**
  * Représente un maître PTP
  *
- * @author Remi
  */
 public class MasterPTP {
 
+	// Timer lancé tous les 'Protocol.SYNC_PERIOD' 
+	// On y diffuse les sync et les follow up en multicast
 	private final Timer syncTimer = new Timer();
-
 	private TimerTask syncTask = new TimerTask() {
 
+		// L'id en cours envoyé par paquet
 		private byte id = 0;
+
+		/* 
+		 * On crée un multicastSocket. Le port de sortie ne nous importe pas, 
+		 * ce socket n'étant utilisé que pour de l'envoi de packet
+		 */
 		private MulticastSocket broadcastSocket = new MulticastSocket();
 		private InetAddress group = InetAddress.getByName(GROUP_ADDRESS);
 
 		@Override
 		public void run() {
 			try {
-				// SYNC
+				// ---------------- SYNC - envoi - {SYNC, id}
 				System.out.println("Sending sync");
 				byte[] syncData = {SYNC.asByte(), id};
 
 				DatagramPacket packet = new DatagramPacket(syncData, syncData.length, group, SYNC_PORT);
-				
+
+				// Temps du système courant envoyé aux esclave, sous forme de long
 				//*
 				long time = System.currentTimeMillis();
-				/*/
+				/*/ Afin de simuler un temps différent sur le master que sur le slave
 				long time = System.currentTimeMillis() + 10000;
 				//*/
 				broadcastSocket.send(packet);
 
 				System.out.println("Sync sent");
 
-				// ----------------
-				// FOLLOW_UP  {1, time, id}
+				// ---------------- FOLLOW_UP - envoi - {FOLLOW_UP, id, time }
 				System.out.println("Sending follow_up");
-				
+
 				byte[] followUpData = ByteBuffer.allocate(2 + Long.BYTES).put(FOLLOW_UP.asByte()).put(id).putLong(time).array();
 				packet = new DatagramPacket(followUpData, followUpData.length, group, SYNC_PORT);
 				broadcastSocket.send(packet);
 				System.out.println("Follow_up sent (" + id + ")");
 
-				//Increasing id
+				// On incrémente l'id pour le prochain sync-followUp
 				id++;
 
 			} catch (IOException ex) {
@@ -67,21 +73,34 @@ public class MasterPTP {
 		}
 	};
 
-	//Delay request
+	/**
+	 * Thread s'occupant des requêtes entrante DELAY_REQUEST et répondant à l'esclave
+	 * en point-à-point
+	 */
 	private final Thread delayRequestThread = new Thread(new Runnable() {
 
+		/**
+		 * On crée un datagramSocket qui écoutera les requêtes entrantes sur le port
+		 * DELAY_PORT.
+		 */
 		DatagramSocket socket = new DatagramSocket(DELAY_PORT);
 
 		@Override
 		public void run() {
-			boolean toContinue = true;
+			boolean toContinue = true; // Afin de pouvoir arrêter le thread
 			try {
 				do {
+					// ---------------- DELAY_REQUEST - réception - {DELAY_REQ, id}
+
+					// Création du paquet entrant
 					byte[] delayRequestBuffer = new byte[2];
 					DatagramPacket packet = new DatagramPacket(delayRequestBuffer, 2);
-					System.out.println("Waiting for delay request...");
-					socket.receive(packet);
 
+					// Attente du paquet
+					System.out.println("Waiting for delay request...");
+					socket.receive(packet); //Bloquant
+
+					//Pour simuler un grand délai, décommenter:
 					/*
 					try {
 						Thread.sleep(2000);
@@ -89,19 +108,26 @@ public class MasterPTP {
 						Logger.getLogger(MasterPTP.class.getName()).log(Level.SEVERE, null, ex);
 					}
 					/*/
-					
+					// On lit le temps à la réception du message
 					long time = System.currentTimeMillis();
 
-					InetAddress address = packet.getAddress();
-					int port = packet.getPort();
-					byte type = packet.getData()[TYPE.ordinal()];
-					byte id = packet.getData()[ID.ordinal()];
+					// ---------------- DELAY_RESPONSE - envoi - {DELAY_RES, id}
+					// Parsing du packet DELAY_REQUEST 
+					MessageType type = MessageType.values()[packet.getData()[TYPE.ordinal()]];
 
-					if (type == DELAY_REQUEST.asByte()) {
+					if (type == DELAY_REQUEST) { // On ignore les paquets si erreur de protocol
 						System.out.println("Delay request received");
-						byte[] delayResponseBuffer = ByteBuffer.allocate(2 + Long.BYTES).put(DELAY_RESPONSE.asByte()).put(id).putLong(time).array();
+						InetAddress address = packet.getAddress();
+						int port = packet.getPort();
+						byte id = packet.getData()[ID.ordinal()];
+						
+						// --> Création du packet DELAY_RESPONSE
+						byte[] delayResponseBuffer = ByteBuffer.allocate(2 + Long.BYTES)
+								.put(DELAY_RESPONSE.asByte())
+								.put(id)
+								.putLong(time).array();
 						packet = new DatagramPacket(delayResponseBuffer, delayResponseBuffer.length, address, port);
-						socket.send(packet);
+						socket.send(packet); //Envoi du paquet
 						System.out.println("Delay response sent");
 					}
 
@@ -122,9 +148,9 @@ public class MasterPTP {
 		delayRequestThread.start();
 	}
 
-	public static void main(String ... args ) throws IOException{
+	public static void main(String... args) throws IOException {
 		MasterPTP masterPTP = new MasterPTP();
-		
+
 	}
-	
+
 }
