@@ -19,6 +19,9 @@ import static util.Protocol.MessageType.*;
 /**
  * Représente un maître PTP, dont l'heure est envoyée à des esclaves sur le réseau,
  * qui se synchroniseront
+ *
+ * @author Miguel Pombo Dias
+ * @author Rémi Jacquemard
  */
 public class MasterPTP {
 
@@ -108,7 +111,7 @@ public class MasterPTP {
 					} catch (InterruptedException ex) {
 						Logger.getLogger(MasterPTP.class.getName()).log(Level.SEVERE, null, ex);
 					}
-					/*/
+					//*/
 					// On lit le temps à la réception du message
 					long time = System.currentTimeMillis();
 
@@ -116,7 +119,7 @@ public class MasterPTP {
 					// Parsing du packet DELAY_REQUEST 
 					MessageType type = MessageType.values()[packet.getData()[TYPE.ordinal()]];
 
-					 // On ignore les paquets si erreur de protocol, et on recommence
+					// On ignore les paquets si erreur de protocol, et on recommence
 					if (type == DELAY_REQUEST && packet.getLength() == 2) {
 						System.out.println("Delay request received");
 						InetAddress address = packet.getAddress();

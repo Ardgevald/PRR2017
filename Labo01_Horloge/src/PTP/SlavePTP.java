@@ -22,7 +22,8 @@ import static util.Protocol.MessageType.*;
 /**
  * Représente un esclave PTP, dont l'heure est synchronisée sur un maitre sur le
  * réseau
- *
+ * @author Miguel Pombo Dias
+ * @author Rémi Jacquemard
  */
 public class SlavePTP {
 
