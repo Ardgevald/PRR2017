@@ -11,9 +11,8 @@ public class Main {
 	 * @throws java.io.IOException
     */
    public static void main(String[] args) throws IOException {
-	   // TODO code application logic here
-	   SlavePTP slavePTP = new PTP.SlavePTP();
-      
+	   // utilisation du slave
+	  SlavePTP slavePTP = new PTP.SlavePTP();
    }
    
 }

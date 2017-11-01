@@ -54,7 +54,8 @@ public class MasterPTP {
 				// Temps du système courant envoyé aux esclave, sous forme de long
 				//*
 				long time = System.currentTimeMillis();
-				/*/ Afin de simuler un temps différent sur le master que sur le slave
+				/*/
+				//Afin de simuler un temps différent sur le master que sur le slave
 				long time = System.currentTimeMillis() + 10000;
 				//*/
 				broadcastSocket.send(packet);
@@ -105,7 +106,7 @@ public class MasterPTP {
 					socket.receive(packet); //Bloquant
 
 					//Pour simuler un grand délai, décommenter:
-					/*
+					/*  <- en remplaçant /* par //*
 					try {
 						Thread.sleep(2000);
 					} catch (InterruptedException ex) {
