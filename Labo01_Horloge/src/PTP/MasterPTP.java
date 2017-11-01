@@ -116,7 +116,8 @@ public class MasterPTP {
 					// Parsing du packet DELAY_REQUEST 
 					MessageType type = MessageType.values()[packet.getData()[TYPE.ordinal()]];
 
-					if (type == DELAY_REQUEST) { // On ignore les paquets si erreur de protocol
+					 // On ignore les paquets si erreur de protocol, et on recommence
+					if (type == DELAY_REQUEST && packet.getLength() == 2) {
 						System.out.println("Delay request received");
 						InetAddress address = packet.getAddress();
 						int port = packet.getPort();
@@ -149,9 +150,15 @@ public class MasterPTP {
 		delayRequestThread.start();
 	}
 
+	/**
+	 * Permet de fermer les connexions
+	 */
+	public synchronized void close() {
+		toContinue = false;
+	}
+
 	public static void main(String... args) throws IOException {
 		MasterPTP masterPTP = new MasterPTP();
-
 	}
 
 }
