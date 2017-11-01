@@ -12,9 +12,9 @@ import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static util.Protocol.*;
-import static util.Protocol.MessageStruct.*;
-import static util.Protocol.MessageType.*;
+import static PTP.Protocol.*;
+import static PTP.Protocol.MessageStruct.*;
+import static PTP.Protocol.MessageType.*;
 
 /**
  * Représente un maître PTP, dont l'heure est envoyée à des esclaves sur le réseau,

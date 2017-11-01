@@ -15,9 +15,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import util.ByteLongConverter;
 
-import static util.Protocol.*;
-import static util.Protocol.MessageStruct.*;
-import static util.Protocol.MessageType.*;
+import static PTP.Protocol.*;
+import static PTP.Protocol.MessageStruct.*;
+import static PTP.Protocol.MessageType.*;
 
 /**
  * Représente un esclave PTP, dont l'heure est synchronisée sur un maitre sur le
