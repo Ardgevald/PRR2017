@@ -4,7 +4,6 @@ import ch.heigvd.interfacesrmi.IGlobalVariable;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
-import java.rmi.RMISecurityManager;
 import java.rmi.RemoteException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -19,7 +18,7 @@ public class App {
    public App(String site) {
 
       // Installer le gestionnaire de securite
-      System.setSecurityManager(new RMISecurityManager());
+      System.setSecurityManager(new SecurityManager());
 
       // Rechercher une reference au serveur
       try {
