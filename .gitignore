@@ -27,3 +27,5 @@ hs_err_pid*
 /Labo01_HorlogeSlave/nbproject/private/
 /Labo01_HorlogeSlave/build/
 /Labo01_HorlogeSlave/dist/
+/Labo02_RMI/LamportManager/target/
+/Labo02_RMI/GlobalVariableClient/target/
