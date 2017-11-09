@@ -6,18 +6,10 @@
         <artifactId>Labo02_RMI</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
-    <artifactId>LamportManager</artifactId>
+    <artifactId>InterfacesRMI</artifactId>
     <packaging>jar</packaging>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
-    <dependencies>
-       <dependency>
-          <groupId>ch.heigvd</groupId>
-          <artifactId>InterfacesRMI</artifactId>
-          <version>1.0-SNAPSHOT</version>
-          <scope>compile</scope>
-       </dependency>
-    </dependencies>
 </project>
