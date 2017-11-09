@@ -9,5 +9,5 @@ import java.rmi.RemoteException;
  */
 public interface ILamportAlgorithm extends Remote{
    public void request(long localTimeStamp) throws RemoteException;
-   public void free(int value) throws RemoteException;
+   public void free(long localTimeStamp, int value) throws RemoteException;
 }
