@@ -11,16 +11,17 @@ import java.rmi.server.UnicastRemoteObject;
 public class LamportManager {
 
    private final static String VARIABLE_SERVER_NAME = "GlobalVariable";
-   
+
    private int globalVariable;
    private final int nbSites;
 
    public static void main(String... args) {
-      System.out.println("Test");
+      LamportManager lamportManager = new LamportManager(2);
    }
 
    public LamportManager(int nbSites) {
       this.nbSites = nbSites;
+      globalVariable = 0;
 
       try {
          GlobalVariable serverVariable = new GlobalVariable();
@@ -32,6 +33,10 @@ public class LamportManager {
    }
 
    private class GlobalVariable extends UnicastRemoteObject implements IGlobalVariable {
+
+      public GlobalVariable() throws RemoteException{
+         super();
+      }
 
       @Override
       public int getVariable() throws RemoteException {
