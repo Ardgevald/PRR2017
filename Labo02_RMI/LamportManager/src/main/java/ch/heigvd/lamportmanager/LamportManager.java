@@ -6,7 +6,6 @@ import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -23,7 +22,7 @@ public class LamportManager {
 	private int globalVariable;
 	private final int nbSites;
 
-	private long timeStamp = 0;
+	private long localTimeStamp = 0;
 
 	private ILamportAlgorithm[] lamportServers;
 
@@ -86,6 +85,10 @@ public class LamportManager {
 		}
 	}
 
+	private void increaseTime(long remoteTimeStamp){
+		localTimeStamp = Math.max(localTimeStamp, remoteTimeStamp) + 1;
+	}
+	
 	private class GlobalVariableServer extends UnicastRemoteObject implements IGlobalVariable {
 
 		public GlobalVariableServer() throws RemoteException {
@@ -101,13 +104,13 @@ public class LamportManager {
 		public void setVariable(int value) throws RemoteException {
 			try {
 				// Demande de section critique
-				sendRequests(timeStamp);
+				sendRequests(localTimeStamp);
 				// On est ici en section critique
 				
 				globalVariable = value;
 				
 				// Relachement de la section critique				
-				sendLiberates(timeStamp, value);
+				sendLiberates(localTimeStamp, value);
 			} catch (InterruptedException ex) {
 				Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
 			}
@@ -118,13 +121,21 @@ public class LamportManager {
 	private class LamportAlgorithmServer implements ILamportAlgorithm {
 
 		@Override
-		public void request(long remoteTimeStamp) throws RemoteException {
-
+		public synchronized void request(long remoteTimeStamp) throws RemoteException {
+			increaseTime(remoteTimeStamp);
+			
+			// TODO : implémentation de l'algorithme en lui même
+			
 			throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
 		}
 
 		@Override
-		public void free(long remoteTimeStamp, int value) throws RemoteException {
+		public synchronized void free(long remoteTimeStamp, int value) throws RemoteException {
+			globalVariable = value;
+			
+			// On met à jour le temps
+			increaseTime(remoteTimeStamp);
+			
 			throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
 		}
 
