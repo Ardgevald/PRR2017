@@ -2,11 +2,16 @@ package ch.heigvd.lamportmanager;
 
 import ch.heigvd.interfacesrmi.IGlobalVariable;
 import ch.heigvd.interfacesrmi.ILamportAlgorithm;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
+import java.net.UnknownHostException;
+import java.rmi.AccessException;
+import java.rmi.AlreadyBoundException;
 import java.rmi.Naming;
 import java.rmi.RMISecurityManager;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -56,43 +61,48 @@ public class LamportManager {
 	private Message[] messagesArray;
 
 	public static void main(String... args) throws RemoteException {
-		try {
-			LocateRegistry.createRegistry(1099);
-
-			if (System.getSecurityManager() == null) {
-				System.setSecurityManager(new SecurityManager());
-			}
-		} catch (Exception e) {
-
-		}
 
 		//LocateRegistry.createRegistry(1099);
+		/*
+		if (System.getSecurityManager() == null) {
+			System.setSecurityManager(new SecurityManager());
+		}//*/
 		//System.setProperty("java.security.policy", "file:./ch/heigvd/lamportmanager/server.policy");
 		LamportManager lamportManager = new LamportManager(2, 1);
 	}
 
 	public LamportManager(int nbSites, int hostIndex) {
+
 		this.nbSites = nbSites;
 		this.hostIndex = hostIndex;
-
-		// TODO : supprimer ce set
 		globalVariable = 57;
-
+		// TODO : supprimer ce set
 		this.lamportServers = new ILamportAlgorithm[nbSites];
 		this.messagesArray = new Message[nbSites];
 
-		// TODO : créer les serveurs distant
 		try {
-			GlobalVariableServer globalVariableServer = new GlobalVariableServer();
-			Naming.rebind(VARIABLE_SERVER_NAME, globalVariableServer);
+
+			// TODO : créer les serveurs distant
+			IGlobalVariable globalVariableServer = new GlobalVariableServer();
+			// On lie dans le registry
+			Registry registry = LocateRegistry.createRegistry(2002);
+			registry.rebind(VARIABLE_SERVER_NAME, globalVariableServer);
+
 			System.out.println("Serveur " + VARIABLE_SERVER_NAME + " pret");
+
+			ILamportAlgorithm lamportAlgorithmServer = new LamportAlgorithmServer();
+			registry.rebind(LAMPORT_SERVER_NAME, lamportAlgorithmServer);
+			System.out.println("Serveur " + LAMPORT_SERVER_NAME + " pret");
+			
+		} catch (RemoteException ex) {
+			Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
+		}
+
+		/*
 
 			LamportAlgorithmServer lamportAlgorithmServer = new LamportAlgorithmServer();
 			Naming.rebind(LAMPORT_SERVER_NAME, lamportAlgorithmServer);
-			System.out.println("Serveur " + LAMPORT_SERVER_NAME + " pret");
-		} catch (MalformedURLException | RemoteException e) {
-			LOG.log(Level.SEVERE, null, e);
-		}
+			System.out.println("Serveur " + LAMPORT_SERVER_NAME + " pret");//*/
 	}
 
 	private synchronized void sendRequestsAndProcessResponse(final long localTimeStamp) throws InterruptedException {
@@ -239,13 +249,12 @@ public class LamportManager {
 				minTime = message.time;
 			}
 		}
-		
-		/**
-		 * "Un processus Pi se donne le droit d'entrer en section critique 
-		 * lorsque file(i).msgType = REQUETE et que son estampille est la 
-		 * plus ancienne des messages contenus dans file(i)."
-		 */
 
+		/**
+		 * "Un processus Pi se donne le droit d'entrer en section critique
+		 * lorsque file(i).msgType = REQUETE et que son estampille est la plus
+		 * ancienne des messages contenus dans file(i)."
+		 */
 		return messagesArray[hostIndex].messageType == Message.MESSAGE_TYPE.REQUEST
 				&& messagesArray[hostIndex].time == minTime;
 	}
