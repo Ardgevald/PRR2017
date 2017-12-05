@@ -13,6 +13,7 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.Arrays;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -80,29 +81,26 @@ public class LamportManager {
 		this.lamportServers = new ILamportAlgorithm[nbSites];
 		this.messagesArray = new Message[nbSites];
 
+		int portUsed = 2000 + hostIndex;
+
 		try {
 
 			// TODO : créer les serveurs distant
 			IGlobalVariable globalVariableServer = new GlobalVariableServer();
 			// On lie dans le registry
-			Registry registry = LocateRegistry.createRegistry(2002);
+			Registry registry = LocateRegistry.createRegistry(portUsed);
 			registry.rebind(VARIABLE_SERVER_NAME, globalVariableServer);
-
-			System.out.println("Serveur " + VARIABLE_SERVER_NAME + " pret");
 
 			ILamportAlgorithm lamportAlgorithmServer = new LamportAlgorithmServer();
 			registry.rebind(LAMPORT_SERVER_NAME, lamportAlgorithmServer);
-			System.out.println("Serveur " + LAMPORT_SERVER_NAME + " pret");
-			
+
+			System.out.println("RMI registry on " + portUsed + " with bindings:");
+			Arrays.stream(registry.list()).forEach(System.out::println);
+
 		} catch (RemoteException ex) {
 			Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
 		}
 
-		/*
-
-			LamportAlgorithmServer lamportAlgorithmServer = new LamportAlgorithmServer();
-			Naming.rebind(LAMPORT_SERVER_NAME, lamportAlgorithmServer);
-			System.out.println("Serveur " + LAMPORT_SERVER_NAME + " pret");//*/
 	}
 
 	private synchronized void sendRequestsAndProcessResponse(final long localTimeStamp) throws InterruptedException {

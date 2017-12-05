@@ -19,15 +19,17 @@ public class App {
 	public App(String site) {
 
 		// Installer le gestionnaire de securite
+		/*
 		if (System.getSecurityManager() == null) {
 			System.setSecurityManager(new SecurityManager());
-		}
+		}//*/
 
 		// Rechercher une reference au serveur
 		try {
 			server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");
 		} catch (MalformedURLException | NotBoundException | RemoteException e) {
-			System.out.println("Erreur avec la reference du serveur " + e);
+			System.out.println("Erreur avec la reference du serveur");
+			e.printStackTrace();
 			System.exit(1);
 		}
 	}
@@ -44,7 +46,7 @@ public class App {
 		try {
 			System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
 			//App application = new App(args[0]);
-			App application = new App("localhost");
+			App application = new App("10.0.0.8:2001");
 			System.out.println(application.getGlobalVariable());
 		} catch (IndexOutOfBoundsException e) {
 			System.out.println("Usage: " + App.class.getSimpleName() + " [site_serveur]");
