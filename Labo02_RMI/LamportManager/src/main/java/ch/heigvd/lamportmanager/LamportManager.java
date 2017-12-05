@@ -30,6 +30,8 @@ public class LamportManager {
    private final int nbSites;
    private final int hostIndex;
 
+   int count = 0;
+
    private long localTimeStamp = 0;
 
    private ILamportAlgorithm[] lamportServers;
@@ -43,8 +45,8 @@ public class LamportManager {
       public static enum MESSAGE_TYPE {
          REQUEST, RESPONSE, LIBERATE
       };
-      private MESSAGE_TYPE messageType;
-      private long time;
+      private final MESSAGE_TYPE messageType;
+      private final long time;
 
       public Message(MESSAGE_TYPE message_type, long time) {
          this.messageType = message_type;
@@ -76,8 +78,7 @@ public class LamportManager {
    public LamportManager(int hostIndex) throws IOException {
       this.hostIndex = hostIndex;
 
-      // TODO : supprimer ce set -----------------------------------asdfasdf §asdf 3qfqwe
-      globalVariable = 57;
+      globalVariable = 0;
 
       // Retreiving the other hosts
       remotes = Files.readAllLines(Paths.get("hosts.txt")).stream()
@@ -186,21 +187,23 @@ public class LamportManager {
       }
 
       @Override
-      public int getVariable() throws RemoteException {
+      public synchronized int getVariable() throws RemoteException {
          return globalVariable;
       }
 
       @Override
-      public void setVariable(int value) throws RemoteException {
+      public synchronized void setVariable(int value) throws RemoteException {
+         System.out.println(hostIndex + " : WaitForCS");
          // Demande de section critique
          waitForCS();
-         // On est ici en section critique
 
+         System.out.println(hostIndex + " : InCS");
+         // On est ici en section critique
          globalVariable = value;
 
          // Relachement de la section critique				
          releaseCS();
-
+         System.out.println(hostIndex + " : ReleaseCS");
       }
 
    }
@@ -231,16 +234,16 @@ public class LamportManager {
 
       @Override
       public void free(long remoteTimeStamp, int value, int hostIndex) throws RemoteException {
-         globalVariable = value;
-
-         // On met à jour le temps local
-         increaseTime(remoteTimeStamp);
-
-         // On met à jour les messages reçu
-         handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
-
-         // On notifie si on souhaitait, par hasard, entrer en section critique
          synchronized (lock) {
+            globalVariable = value;
+
+            // On met à jour le temps local
+            increaseTime(remoteTimeStamp);
+
+            // On met à jour les messages reçu
+            handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
+
+            // On notifie si on souhaitait, par hasard, entrer en section critique
             lock.notify();
          }
       }
@@ -255,8 +258,8 @@ public class LamportManager {
          * On calcule si on peut entrer en SC
          * On reste bloqué tant qu'on peut pas entrer en SC
           */
-         while (!canEnterCS()) {
-            synchronized (lock) {
+         synchronized (lock) {
+            while (!canEnterCS()) {
                // Attendre jusqu'à ce qu'on soit notifié lors de l'arrivée d'un message
                lock.wait();
             }

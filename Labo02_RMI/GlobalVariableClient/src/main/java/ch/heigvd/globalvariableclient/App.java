@@ -38,15 +38,17 @@ public class App {
 
       // Creating 5 app per server
       //*
-		for (int i = 0; i < 1; i++) {
-			for (int j = 0; j < 2; j++) {
+		for (int i = 0; i < 3; i++) {
+			for (int j = 0; j < 5; j++) {
 				final App application = new App("localhost:" + (2002 + i));
             final String name = i + " - " + j + " : ";
 				new Thread(() -> {
                
-					for (int x = 0; x < 60; x++) {
+					for (int x = 0; x < 1000; x++) {
 						try {
+                     System.out.println(name + "setting value " + x);
 							application.setGlobalValue(x);
+                     System.out.println(name + "getting value ");
 							System.out.println(name + application.getGlobalVariable());
 						} catch (RemoteException ex) {
 							Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
