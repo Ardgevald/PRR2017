@@ -36,9 +36,9 @@ public class App {
 
 	public static void main(String... args) {
 		try {
-			System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
+			//System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
 			//App application = new App(args[0]);
-			App application = new App("10.0.0.8:2001");
+			App application = new App("localhost:2002");
 			System.out.println(application.getGlobalVariable());
 		} catch (IndexOutOfBoundsException e) {
 			System.out.println("Usage: " + App.class.getSimpleName() + " [site_serveur]");
