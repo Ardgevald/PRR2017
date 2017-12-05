@@ -4,8 +4,11 @@ import ch.heigvd.interfacesrmi.IGlobalVariable;
 import ch.heigvd.interfacesrmi.ILamportAlgorithm;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
+import java.rmi.RMISecurityManager;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,13 +29,25 @@ public class LamportManager {
 
 	private ILamportAlgorithm[] lamportServers;
 
-	public static void main(String... args) {
+	public static void main(String... args) throws RemoteException {
+		try {
+			LocateRegistry.createRegistry(1099);
+
+			if (System.getSecurityManager() == null) {
+				System.setSecurityManager(new SecurityManager());
+			}
+		} catch (Exception e) {
+
+		}
+
+		//LocateRegistry.createRegistry(1099);
+		//System.setProperty("java.security.policy", "file:./ch/heigvd/lamportmanager/server.policy");
 		LamportManager lamportManager = new LamportManager(2);
 	}
 
 	public LamportManager(int nbSites) {
 		this.nbSites = nbSites;
-		globalVariable = 0;
+		globalVariable = 57;
 
 		this.lamportServers = new ILamportAlgorithm[nbSites];
 
@@ -75,20 +90,22 @@ public class LamportManager {
 			senderThread.join();
 		}
 
-		// On est ici en section critique
+		// TODO : attendre tant qu'on a pas la section critique
+		
+		// TODO : calculer si on peut rentrer en section critique
 	}
 
 	private synchronized void sendLiberates(long localTimeStamp, int value) throws RemoteException {
 		// la méthode free n'est pas bloquante
-		for(ILamportAlgorithm lamportServer : lamportServers){
+		for (ILamportAlgorithm lamportServer : lamportServers) {
 			lamportServer.free(localTimeStamp, value);
 		}
 	}
 
-	private void increaseTime(long remoteTimeStamp){
+	private void increaseTime(long remoteTimeStamp) {
 		localTimeStamp = Math.max(localTimeStamp, remoteTimeStamp) + 1;
 	}
-	
+
 	private class GlobalVariableServer extends UnicastRemoteObject implements IGlobalVariable {
 
 		public GlobalVariableServer() throws RemoteException {
@@ -106,9 +123,9 @@ public class LamportManager {
 				// Demande de section critique
 				sendRequests(localTimeStamp);
 				// On est ici en section critique
-				
+
 				globalVariable = value;
-				
+
 				// Relachement de la section critique				
 				sendLiberates(localTimeStamp, value);
 			} catch (InterruptedException ex) {
@@ -118,27 +135,37 @@ public class LamportManager {
 
 	}
 
-	private class LamportAlgorithmServer implements ILamportAlgorithm {
+	private class LamportAlgorithmServer extends UnicastRemoteObject implements ILamportAlgorithm {
+
+		public LamportAlgorithmServer() throws RemoteException {
+			super();
+		}
 
 		@Override
-		public synchronized void request(long remoteTimeStamp) throws RemoteException {
+		public synchronized long request(long remoteTimeStamp) throws RemoteException {
 			increaseTime(remoteTimeStamp);
 			
-			// TODO : implémentation de l'algorithme en lui même
-			
-			throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+			return localTimeStamp;			
 		}
 
 		@Override
 		public synchronized void free(long remoteTimeStamp, int value) throws RemoteException {
 			globalVariable = value;
-			
+
 			// On met à jour le temps
 			increaseTime(remoteTimeStamp);
 			
+			/// TODO calculer si on peut entrer en secion critique dans un nouveau thread
+			
+
 			throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
 		}
 
+	}
+	
+	private boolean enterCS(){
+		
+		throw new UnsupportedOperationException("Not supported yet.");
 	}
 
 }

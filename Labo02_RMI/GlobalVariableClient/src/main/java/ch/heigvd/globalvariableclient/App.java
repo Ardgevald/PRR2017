@@ -5,6 +5,7 @@ import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -13,39 +14,43 @@ import java.util.logging.Logger;
  */
 public class App {
 
-   IGlobalVariable server;
+	IGlobalVariable server;
 
-   public App(String site) {
+	public App(String site) {
 
-      // Installer le gestionnaire de securite
-      System.setSecurityManager(new SecurityManager());
+		// Installer le gestionnaire de securite
+		if (System.getSecurityManager() == null) {
+			System.setSecurityManager(new SecurityManager());
+		}
 
-      // Rechercher une reference au serveur
-      try {
-         server = (IGlobalVariable) Naming.lookup("rmi://" + site + "/IGlobalVariable");
-      } catch (MalformedURLException | NotBoundException | RemoteException e) {
-         System.out.println("Erreur avec la reference du serveur " + e);
-         System.exit(1);
-      }
-   }
+		// Rechercher une reference au serveur
+		try {
+			server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");
+		} catch (MalformedURLException | NotBoundException | RemoteException e) {
+			System.out.println("Erreur avec la reference du serveur " + e);
+			System.exit(1);
+		}
+	}
 
-   public int getGlobalVariable() throws RemoteException {
-      return server.getVariable();
-   }
-   
-   public void setGlobalValue(int value) throws RemoteException{
-      server.setVariable(value);
-   }
+	public int getGlobalVariable() throws RemoteException {
+		return server.getVariable();
+	}
 
-   public static void main(String... args) {
-      try {
-         App application = new App(args[0]);
-         System.out.println(application.getGlobalVariable());
-      } catch (IndexOutOfBoundsException e) {
-         System.out.println("Usage: " + App.class.getSimpleName() + " [site_serveur]");
-         System.exit(1);
-      } catch (RemoteException ex) {
-         Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-      }
-   }
+	public void setGlobalValue(int value) throws RemoteException {
+		server.setVariable(value);
+	}
+
+	public static void main(String... args) {
+		try {
+			System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
+			//App application = new App(args[0]);
+			App application = new App("localhost");
+			System.out.println(application.getGlobalVariable());
+		} catch (IndexOutOfBoundsException e) {
+			System.out.println("Usage: " + App.class.getSimpleName() + " [site_serveur]");
+			System.exit(1);
+		} catch (RemoteException ex) {
+			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
+		}
+	}
 }
