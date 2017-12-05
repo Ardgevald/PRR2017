@@ -64,7 +64,7 @@ public class LamportManager {
 	public static void main(String... args) throws RemoteException, IOException {
 		// Creating hosts
 		LamportManager[] lamportManagers  = {
-			new LamportManager(0), new LamportManager(1)
+			new LamportManager(0), new LamportManager(1), new LamportManager(2)
 		};
 		
 		// Connecting hosts
@@ -84,7 +84,12 @@ public class LamportManager {
 		this.nbSites = remotes.length;
 
 		this.lamportServers = new ILamportAlgorithm[nbSites];
+		
+		// On initialise les messages reçu à un temps 0 avec des liberates
 		this.messagesArray = new Message[nbSites];
+		for(int i = 0; i < messagesArray.length; i++){
+			this.messagesArray[i] = new Message(Message.MESSAGE_TYPE.LIBERATE, 0);
+		}
 
 		try {
 

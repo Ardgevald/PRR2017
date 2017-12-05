@@ -13,7 +13,7 @@ import java.util.logging.Logger;
  */
 public class App {
 
-	IGlobalVariable server;
+	private IGlobalVariable server;
 
 	public App(String site) {
 		// Rechercher une reference au serveur
@@ -35,16 +35,41 @@ public class App {
 	}
 
 	public static void main(String... args) {
+
+		// Creating 5 app per server
+		/*
+		for (int i = 0; i < 3; i++) {
+			for (int j = 0; j < 5; j++) {
+				final App application = new App("localhost:" + (2002 + i));
+
+				new Thread(() -> {
+					for (int x = 0; x < 60; x++) {
+						try {
+							application.setGlobalValue(x);
+							System.out.println(application.getGlobalVariable());
+						} catch (RemoteException ex) {
+							Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
+						}
+					}
+				}).start();
+
+			}
+		}//*/
+		//*
 		try {
 			//System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
 			//App application = new App(args[0]);
 			App application = new App("localhost:2002");
 			System.out.println(application.getGlobalVariable());
+			application.setGlobalValue(23);
+			System.out.println(application.getGlobalVariable());
+			
+		
 		} catch (IndexOutOfBoundsException e) {
 			System.out.println("Usage: " + App.class.getSimpleName() + " [site_serveur]");
 			System.exit(1);
 		} catch (RemoteException ex) {
 			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-		}
+		}*/
 	}
 }
