@@ -70,6 +70,6 @@ public class App {
 			System.exit(1);
 		} catch (RemoteException ex) {
 			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-		}*/
+		}//*/
 	}
 }
