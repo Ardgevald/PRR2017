@@ -5,7 +5,6 @@ import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -17,13 +16,6 @@ public class App {
 	IGlobalVariable server;
 
 	public App(String site) {
-
-		// Installer le gestionnaire de securite
-		/*
-		if (System.getSecurityManager() == null) {
-			System.setSecurityManager(new SecurityManager());
-		}//*/
-
 		// Rechercher une reference au serveur
 		try {
 			server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");

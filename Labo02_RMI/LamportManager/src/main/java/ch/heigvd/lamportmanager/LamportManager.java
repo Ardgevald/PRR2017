@@ -3,22 +3,16 @@ package ch.heigvd.lamportmanager;
 import ch.heigvd.interfacesrmi.IGlobalVariable;
 import ch.heigvd.interfacesrmi.ILamportAlgorithm;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.MalformedURLException;
-import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.rmi.AccessException;
-import java.rmi.AlreadyBoundException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
-import java.rmi.RMISecurityManager;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.Arrays;
-import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -68,14 +62,6 @@ public class LamportManager {
 	private Message[] messagesArray;
 
 	public static void main(String... args) throws RemoteException, IOException {
-
-		//LocateRegistry.createRegistry(1099);
-		/*
-		if (System.getSecurityManager() == null) {
-			System.setSecurityManager(new SecurityManager());
-		}//*/
-		//System.setProperty("java.security.policy", "file:./ch/heigvd/lamportmanager/server.policy");
-		
 		// Creating hosts
 		LamportManager[] lamportManagers  = {
 			new LamportManager(0), new LamportManager(1)
@@ -86,10 +72,9 @@ public class LamportManager {
 	}
 
 	public LamportManager(int hostIndex) throws IOException {
-
 		this.hostIndex = hostIndex;
 
-		// TODO : supprimer ce set
+		// TODO : supprimer ce set -----------------------------------asdfasdf §asdf 3qfqwe
 		globalVariable = 57;
 
 		// Retreiving the other hosts
