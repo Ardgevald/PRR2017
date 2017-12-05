@@ -24,10 +24,36 @@ public class LamportManager {
 
 	private int globalVariable;
 	private final int nbSites;
+	private final int hostIndex;
 
 	private long localTimeStamp = 0;
 
 	private ILamportAlgorithm[] lamportServers;
+
+	private static class Message {
+
+		public static enum MESSAGE_TYPE {
+			REQUEST, RESPONSE, LIBERATE
+		};
+		private MESSAGE_TYPE messageType;
+		private long time;
+
+		public Message(MESSAGE_TYPE message_type, long time) {
+			this.messageType = message_type;
+			this.time = time;
+		}
+
+		public MESSAGE_TYPE getMessageType() {
+			return messageType;
+		}
+
+		public long getTime() {
+			return time;
+		}
+
+	}
+
+	private Message[] messagesArray;
 
 	public static void main(String... args) throws RemoteException {
 		try {
@@ -42,14 +68,18 @@ public class LamportManager {
 
 		//LocateRegistry.createRegistry(1099);
 		//System.setProperty("java.security.policy", "file:./ch/heigvd/lamportmanager/server.policy");
-		LamportManager lamportManager = new LamportManager(2);
+		LamportManager lamportManager = new LamportManager(2, 1);
 	}
 
-	public LamportManager(int nbSites) {
+	public LamportManager(int nbSites, int hostIndex) {
 		this.nbSites = nbSites;
+		this.hostIndex = hostIndex;
+
+		// TODO : supprimer ce set
 		globalVariable = 57;
 
 		this.lamportServers = new ILamportAlgorithm[nbSites];
+		this.messagesArray = new Message[nbSites];
 
 		// TODO : créer les serveurs distant
 		try {
@@ -65,7 +95,10 @@ public class LamportManager {
 		}
 	}
 
-	private synchronized void sendRequests(final long localTimeStamp) throws InterruptedException {
+	private synchronized void sendRequestsAndProcessResponse(final long localTimeStamp) throws InterruptedException {
+		// On set notre message courant
+		messagesArray[hostIndex] = new Message(Message.MESSAGE_TYPE.REQUEST, localTimeStamp);
+
 		Thread[] senderThreads = new Thread[lamportServers.length];
 
 		// Création des threads d'envoi des requêtes
@@ -73,7 +106,11 @@ public class LamportManager {
 			final int index = i;
 			senderThreads[i] = new Thread(() -> {
 				try {
-					lamportServers[index].request(localTimeStamp);
+					// On envoie à tout le monde, dont soit même
+					long remoteTime = lamportServers[index].request(localTimeStamp, hostIndex);
+
+					// On set le message reçu
+					handleMessageReceived(index, new Message(Message.MESSAGE_TYPE.RESPONSE, remoteTime));
 				} catch (RemoteException ex) {
 					Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
 				}
@@ -90,15 +127,12 @@ public class LamportManager {
 			senderThread.join();
 		}
 
-		// TODO : attendre tant qu'on a pas la section critique
-		
-		// TODO : calculer si on peut rentrer en section critique
 	}
 
 	private synchronized void sendLiberates(long localTimeStamp, int value) throws RemoteException {
 		// la méthode free n'est pas bloquante
 		for (ILamportAlgorithm lamportServer : lamportServers) {
-			lamportServer.free(localTimeStamp, value);
+			lamportServer.free(localTimeStamp, value, hostIndex);
 		}
 	}
 
@@ -119,18 +153,23 @@ public class LamportManager {
 
 		@Override
 		public void setVariable(int value) throws RemoteException {
-			try {
-				// Demande de section critique
-				sendRequests(localTimeStamp);
-				// On est ici en section critique
+			// Demande de section critique
+			waitForCS();
+			// On est ici en section critique
 
-				globalVariable = value;
+			globalVariable = value;
 
-				// Relachement de la section critique				
-				sendLiberates(localTimeStamp, value);
-			} catch (InterruptedException ex) {
-				Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
-			}
+			// Relachement de la section critique				
+			releaseCS();
+
+		}
+
+	}
+
+	private void handleMessageReceived(int hostIndex, Message message) {
+		// On replace pas les messages de type requêtes par une quittance
+		if (message.messageType != Message.MESSAGE_TYPE.RESPONSE || messagesArray[hostIndex].messageType != Message.MESSAGE_TYPE.REQUEST) {
+			messagesArray[hostIndex] = message;
 		}
 
 	}
@@ -142,30 +181,73 @@ public class LamportManager {
 		}
 
 		@Override
-		public synchronized long request(long remoteTimeStamp) throws RemoteException {
+		public synchronized long request(long remoteTimeStamp, int hostIndex) throws RemoteException {
 			increaseTime(remoteTimeStamp);
-			
-			return localTimeStamp;			
+
+			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.REQUEST, remoteTimeStamp));
+
+			// On quittance en envoyant le temps courant
+			return localTimeStamp;
 		}
 
 		@Override
-		public synchronized void free(long remoteTimeStamp, int value) throws RemoteException {
+		public synchronized void free(long remoteTimeStamp, int value, int hostIndex) throws RemoteException {
 			globalVariable = value;
 
-			// On met à jour le temps
+			// On met à jour le temps local
 			increaseTime(remoteTimeStamp);
-			
-			/// TODO calculer si on peut entrer en secion critique dans un nouveau thread
-			
 
-			throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+			// On met à jour les messages reçu
+			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
+
+			// On notifie si on souhaitait, par hasard, entrer en section critique
+			LamportManager.this.notify();
 		}
 
 	}
-	
-	private boolean enterCS(){
+
+	private synchronized void waitForCS() {
+		try {
+			sendRequestsAndProcessResponse(localTimeStamp);
+
+			/*
+			* On calcule si on peut entrer en SC
+			* On reste bloqué tant qu'on peut pas entrer en SC
+			 */
+			while (!canEnterCS()) {
+				// Attendre jusqu'à ce qu'on soit notifié lors de l'arrivée d'un message
+				this.wait();
+			}
+
+		} catch (InterruptedException ex) {
+			Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
+		}
+	}
+
+	private synchronized void releaseCS() {
+		try {
+			sendLiberates(localTimeStamp, globalVariable);
+		} catch (RemoteException ex) {
+			Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
+		}
+	}
+
+	private boolean canEnterCS() {
+		long minTime = Long.MAX_VALUE;
+		for (Message message : messagesArray) {
+			if (message.time < minTime) {
+				minTime = message.time;
+			}
+		}
 		
-		throw new UnsupportedOperationException("Not supported yet.");
+		/**
+		 * "Un processus Pi se donne le droit d'entrer en section critique 
+		 * lorsque file(i).msgType = REQUETE et que son estampille est la 
+		 * plus ancienne des messages contenus dans file(i)."
+		 */
+
+		return messagesArray[hostIndex].messageType == Message.MESSAGE_TYPE.REQUEST
+				&& messagesArray[hostIndex].time == minTime;
 	}
 
 }
