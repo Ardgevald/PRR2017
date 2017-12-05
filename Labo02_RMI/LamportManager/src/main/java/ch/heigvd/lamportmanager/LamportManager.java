@@ -2,12 +2,16 @@ package ch.heigvd.lamportmanager;
 
 import ch.heigvd.interfacesrmi.IGlobalVariable;
 import ch.heigvd.interfacesrmi.ILamportAlgorithm;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.rmi.AccessException;
 import java.rmi.AlreadyBoundException;
 import java.rmi.Naming;
+import java.rmi.NotBoundException;
 import java.rmi.RMISecurityManager;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -36,6 +40,8 @@ public class LamportManager {
 
 	private ILamportAlgorithm[] lamportServers;
 
+	String[][] remotes;
+
 	private static class Message {
 
 		public static enum MESSAGE_TYPE {
@@ -61,7 +67,7 @@ public class LamportManager {
 
 	private Message[] messagesArray;
 
-	public static void main(String... args) throws RemoteException {
+	public static void main(String... args) throws RemoteException, IOException {
 
 		//LocateRegistry.createRegistry(1099);
 		/*
@@ -69,23 +75,38 @@ public class LamportManager {
 			System.setSecurityManager(new SecurityManager());
 		}//*/
 		//System.setProperty("java.security.policy", "file:./ch/heigvd/lamportmanager/server.policy");
-		LamportManager lamportManager = new LamportManager(2, 1);
+		
+		// Creating hosts
+		LamportManager[] lamportManagers  = {
+			new LamportManager(0), new LamportManager(1)
+		};
+		
+		// Connecting hosts
+		Arrays.stream(lamportManagers).forEach(LamportManager::connectToRemotes);
 	}
 
-	public LamportManager(int nbSites, int hostIndex) {
+	public LamportManager(int hostIndex) throws IOException {
 
-		this.nbSites = nbSites;
 		this.hostIndex = hostIndex;
-		globalVariable = 57;
+
 		// TODO : supprimer ce set
+		globalVariable = 57;
+
+		// Retreiving the other hosts
+		remotes = Files.readAllLines(Paths.get("hosts.txt")).stream()
+				.map((s) -> s.split(" "))
+				.toArray(String[][]::new);
+		this.nbSites = remotes.length;
+
 		this.lamportServers = new ILamportAlgorithm[nbSites];
 		this.messagesArray = new Message[nbSites];
 
-		int portUsed = 2000 + hostIndex;
-
 		try {
 
-			// TODO : créer les serveurs distant
+			// Retreiving our port address
+			int portUsed = Integer.parseInt(remotes[hostIndex][1]);
+
+			// Creating local server
 			IGlobalVariable globalVariableServer = new GlobalVariableServer();
 			// On lie dans le registry
 			Registry registry = LocateRegistry.createRegistry(portUsed);
@@ -100,7 +121,21 @@ public class LamportManager {
 		} catch (RemoteException ex) {
 			Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
 		}
+	}
 
+	public void connectToRemotes() {
+		// Connecting to other hosts
+		for (int i = 0; i < remotes.length; i++) {
+			String[] currentHost = remotes[i];
+			try {
+				ILamportAlgorithm remoteServer = (ILamportAlgorithm) Naming.lookup("//" + currentHost[0] + ":" + currentHost[1] + "/" + LAMPORT_SERVER_NAME);
+				lamportServers[i] = remoteServer;
+			} catch (NotBoundException | MalformedURLException | RemoteException ex) {
+				Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
+			}
+		}
+		
+		System.out.println("Remotes connected !");
 	}
 
 	private synchronized void sendRequestsAndProcessResponse(final long localTimeStamp) throws InterruptedException {
@@ -114,7 +149,11 @@ public class LamportManager {
 			final int index = i;
 			senderThreads[i] = new Thread(() -> {
 				try {
-					// On envoie à tout le monde, dont soit même
+					// On envoie à tout le monde
+					/**
+					 * NOTE IMPORTANTE : on envoie aussi à soit même, ce qui a
+					 * pour effet d'y ajouter notre requête dans la liste local
+					 */
 					long remoteTime = lamportServers[index].request(localTimeStamp, hostIndex);
 
 					// On set le message reçu
