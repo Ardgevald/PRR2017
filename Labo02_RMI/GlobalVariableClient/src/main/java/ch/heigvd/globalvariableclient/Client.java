@@ -73,10 +73,14 @@ public class Client {
 	// ------------- ENTRY POINT -----------
 	/**
 	 * Permet de lancer un client temporaire d'un serveur de variable global en
-	 * standalone Il doit y avoir au minimum 2 arguments: 1: le host (adresse IP
-	 * ou hostName), sous la forme "10.0.0.5" 2: le port RMI utilisé, tel que
-	 * 2000
+	 * standalone Il doit y avoir au minimum 2 arguments:
+    * 1: le host (adresse IP ou hostName), sous la forme "10.0.0.5"
+    * 2: le port RMI utilisé, tel que 2000
 	 *
+    * il est ensuite possible en console de lire ou écrire la variable
+    * partagée en suivant les instructions affichées.    * 
+    * 
+    * TODO : remove ?
 	 * Sans 3ème argument fourni, cet appel ne fait que récupérer la valeur de
 	 * la variable global actuelle. Avec un 3ème argument, on peut y spécifier
 	 * la nouvelle valeur de la variable globale, un entier, tel que '52'
@@ -91,7 +95,6 @@ public class Client {
 			Client application = new Client(host + ":" + port);
 			System.out.println("Connected to " + host + ":" + port);
 			
-			
 			BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
 			boolean cont = true;
 			do {
@@ -99,8 +102,6 @@ public class Client {
 				System.out.println("2 : set current value");;
 				System.out.println("q : quit");
 				System.out.print("> ");
-				
-				
 				
 				switch(r.readLine()){
 					case "1":
@@ -116,6 +117,7 @@ public class Client {
 						break;
 					case "q":
 						cont = false;
+                  break;
 					default:
 						System.out.println("Bad input, please retry...");
 						break;
@@ -126,13 +128,13 @@ public class Client {
 
 		} catch (IndexOutOfBoundsException e) {
 			System.err.println("Usage: <hostName> <port> [<value to set>]");
-			System.exit(1);
 		} catch (RemoteException | MalformedURLException | NotBoundException ex) {
 			Logger.getLogger(Client.class
 					.getName()).log(Level.SEVERE, null, ex);
 		} catch (IOException ex) {
 			Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-		}
-
+		} finally {
+         System.exit(1);
+      }
 	}
 }
