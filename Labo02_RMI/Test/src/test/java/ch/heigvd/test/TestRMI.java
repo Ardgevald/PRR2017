@@ -1,6 +1,6 @@
 package ch.heigvd.test;
 
-import ch.heigvd.globalvariableclient.App;
+import ch.heigvd.globalvariableclient.Client;
 import ch.heigvd.lamportmanager.LamportManager;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -55,7 +55,7 @@ public class TestRMI {
 		
 		for (int i = 0; i < 3; i++) {
 			for (int j = 0; j < 5; j++) {
-				final App application = new App("localhost:" + (2002 + i));
+				final Client application = new Client("localhost:" + (2002 + i));
 				final String name = i + " - " + j + " : ";
 				final int index = i;
 				Thread t = new Thread(() -> {

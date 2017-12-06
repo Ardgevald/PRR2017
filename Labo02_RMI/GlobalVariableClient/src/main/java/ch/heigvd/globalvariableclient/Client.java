@@ -1,0 +1,109 @@
+package ch.heigvd.globalvariableclient;
+
+import ch.heigvd.interfacesrmi.IGlobalVariable;
+import java.net.MalformedURLException;
+import java.rmi.Naming;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * Cette classe représente un client de variable grobale, 
+ * qui se connectera à un serveur RMI Lamport passé en paramètre
+ * Cette classe peut être incluse dans une application en tant que librairie,
+ * ce qui permettrait facilement d'avoir une variable globale commune à plusieurs
+ * application
+ * 
+ * @author Miguel Pombo Dias
+ * @author Rémi Jacquemard
+ */
+public class Client {
+
+	/**
+	 * Le serveur distant RMI
+	 */
+	private IGlobalVariable server;
+
+	/**
+	 * Permet de créer un client qui se connecte à un serveur gérant des variables
+	 * gobales en RMI passé en paramètre
+	 * @param site le site sur lequel se connecter, de la forme "10.2.3.4:2002"
+	 * @throws MalformedURLException Si l'url n'est pas bon
+	 * @throws RemoteException Si il y a un problème avec la connexion du site
+	 * @throws NotBoundException si il y a un problème avec le binding
+	 */
+	public Client(String site) throws MalformedURLException, RemoteException, NotBoundException {
+		// Rechercher une reference au serveur
+		try {
+			server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");
+		} catch (MalformedURLException | NotBoundException | RemoteException e) {
+			System.err.println("Erreur avec la reference du serveur");
+			throw e;
+		}
+	}
+
+	/**
+	 * Permet de récupérer la variable global à partir du serveur en RMI
+	 * @return la variable gobal
+	 * @throws RemoteException s'il y a eu une erreur lors de la récupèration 
+	 * de la variable
+	 */
+	public int getGlobalVariable() throws RemoteException {
+		return server.getVariable();
+	}
+
+	/**
+	 * Permet de modifier la variable global stockée sur le serveur RMI ainsi 
+	 * que sur tous les serveurs RMI distant
+	 * @param value la nouvelle valeur de la variable
+	 * @throws RemoteException s'il y a eu une erreur lors de la modification 
+	 * de la variable
+	 */
+	public void setGlobalValue(int value) throws RemoteException {
+		server.setVariable(value);
+	}
+
+	
+	
+	
+	// ------------- ENTRY POINT -----------
+	/**
+	 * Permet de lancer un client temporaire d'un serveur de variable global en standalone
+	 * Il doit y avoir au minimum 2 arguments:
+	 *		1: le host (adresse IP ou hostName), sous la forme "10.0.0.5"
+	 *		2: le port RMI utilisé, tel que 2000
+	 * 
+	 * Sans 3ème argument fourni, cet appel ne fait que récupérer la valeur de la
+	 * variable global actuelle.
+	 * Avec un 3ème argument, on peut y spécifier la nouvelle valeur de la variable
+	 * globale, un entier, tel que '52'
+	 * @param args les paramètres du client
+	 */
+	public static void main(String... args) {
+		try {
+			String host = args[0];
+			String port = args[1];
+			Integer value = null;
+			if (args.length == 3) {
+				value = Integer.parseInt(args[2]);
+			}
+
+			Client application = new Client(host + ":" + port);
+			System.out.println("global value : " + application.getGlobalVariable());
+
+			if (value != null) {
+				application.setGlobalValue(value);
+				System.out.println("global value after setting : " + application.getGlobalVariable());
+			}
+		} catch (IndexOutOfBoundsException e) {
+			System.err.println("Usage: <hostName> <port> [<value to set>]");
+			System.exit(1);
+		} catch (RemoteException | MalformedURLException | NotBoundException ex) {
+			Logger.getLogger(Client.class
+					.getName()).log(Level.SEVERE, null, ex);
+		}
+
+	}
+}
+
