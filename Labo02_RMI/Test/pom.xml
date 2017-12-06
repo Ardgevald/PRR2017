@@ -6,19 +6,9 @@
         <artifactId>Labo02_RMI</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
-    <artifactId>GlobalVariableClient</artifactId>
+    <artifactId>Test</artifactId>
     <packaging>jar</packaging>
-    <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-    </properties>
     <dependencies>
-       <dependency>
-          <groupId>ch.heigvd</groupId>
-          <artifactId>InterfacesRMI</artifactId>
-          <version>1.0-SNAPSHOT</version>
-          <scope>compile</scope>
-       </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -31,5 +21,23 @@
             <version>1.3</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>ch.heigvd</groupId>
+            <artifactId>LamportManager</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>test</scope>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>ch.heigvd</groupId>
+            <artifactId>GlobalVariableClient</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>test</scope>
+            <type>jar</type>
+        </dependency>
     </dependencies>
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+    </properties>
 </project>

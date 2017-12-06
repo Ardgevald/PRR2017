@@ -15,14 +15,13 @@ public class App {
 
 	private IGlobalVariable server;
 
-	public App(String site) {
+	public App(String site) throws MalformedURLException, RemoteException, NotBoundException {
 		// Rechercher une reference au serveur
 		try {
 			server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");
 		} catch (MalformedURLException | NotBoundException | RemoteException e) {
-			System.out.println("Erreur avec la reference du serveur");
-			e.printStackTrace();
-			System.exit(1);
+			System.err.println("Erreur avec la reference du serveur");
+			throw e;
 		}
 	}
 
@@ -34,47 +33,34 @@ public class App {
 		server.setVariable(value);
 	}
 
+	
+	
+	
+	// ------------- ENTRY POINT -----------
 	public static void main(String... args) {
-
-		// Creating 5 app per server
-		//*
-		for (int i = 0; i < 3; i++) {
-			for (int j = 0; j < 5; j++) {
-				final App application = new App("localhost:" + (2002 + i));
-				final String name = i + " - " + j + " : ";
-				final int index = i;
-				new Thread(() -> {
-
-					for (int x = 0; x < 10000; x++) {
-						try {
-							int val = x + index * 1000;
-							System.out.println(name + "setting value " + val);
-							application.setGlobalValue(val);
-							System.out.println(name + "getting value ");
-							System.out.println(name + application.getGlobalVariable());
-						} catch (RemoteException ex) {
-							Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-						}
-					}
-				}).start();
-
+		try {
+			String host = args[0];
+			String port = args[1];
+			Integer value = null;
+			if (args.length == 3) {
+				value = Integer.parseInt(args[2]);
 			}
-		}
-		/*/
-      try {
-         //System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
-         //App application = new App(args[0]);
-         App application = new App("localhost:2002");
-         System.out.println(application.getGlobalVariable());
-         application.setGlobalValue(23);
-         System.out.println(application.getGlobalVariable());
 
-      } catch (IndexOutOfBoundsException e) {
-         System.out.println("Usage: " + App.class.getSimpleName() + " [site_serveur]");
-         System.exit(1);
-      } catch (RemoteException ex) {
-         Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-      }
-      /**/
+			App application = new App(host + ":" + port);
+			System.out.println("global value : " + application.getGlobalVariable());
+
+			if (value != null) {
+				application.setGlobalValue(value);
+				System.out.println("global value after setting : " + application.getGlobalVariable());
+			}
+		} catch (IndexOutOfBoundsException e) {
+			System.err.println("Usage: <hostName> <port> [<value to set>]");
+			System.exit(1);
+		} catch (RemoteException | MalformedURLException | NotBoundException ex) {
+			Logger.getLogger(App.class
+					.getName()).log(Level.SEVERE, null, ex);
+		}
+
 	}
 }
+

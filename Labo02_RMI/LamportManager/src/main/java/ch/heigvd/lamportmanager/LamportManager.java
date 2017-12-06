@@ -64,25 +64,12 @@ public class LamportManager {
 
 	private Message[] messagesArray;
 
-	public static void main(String... args) throws RemoteException, IOException {
-		// Creating hosts
-		LamportManager[] lamportManagers = {
-			new LamportManager(0), new LamportManager(1), new LamportManager(2)
-		};
-
-		// Connecting hosts
-		Arrays.stream(lamportManagers).forEach(LamportManager::connectToRemotes);
-	}
-
-	public LamportManager(int hostIndex) throws IOException {
+	public LamportManager(String[][] hosts, int hostIndex) {
 		this.hostIndex = hostIndex;
 
 		globalVariable = 0;
 
-		// Retreiving the other hosts
-		remotes = Files.readAllLines(Paths.get("hosts.txt")).stream()
-				.map((s) -> s.split(" "))
-				.toArray(String[][]::new);
+		this.remotes = hosts;
 		this.nbSites = remotes.length;
 
 		this.lamportServers = new ILamportAlgorithm[nbSites];
@@ -116,16 +103,21 @@ public class LamportManager {
 		}
 	}
 
-	public void connectToRemotes() {
+	public LamportManager(int hostIndex) throws IOException {
+		// Retreiving the other hosts from the hosts.txt file;
+		this(Files.readAllLines(Paths.get("hosts.txt")).stream()
+				.map((s) -> s.split(" "))
+				.toArray(String[][]::new), hostIndex);
+
+	}
+
+	public void connectToRemotes() throws NotBoundException, MalformedURLException, RemoteException {
 		// Connecting to other hosts
 		for (int i = 0; i < remotes.length; i++) {
 			String[] currentHost = remotes[i];
-			try {
-				ILamportAlgorithm remoteServer = (ILamportAlgorithm) Naming.lookup("//" + currentHost[0] + ":" + currentHost[1] + "/" + LAMPORT_SERVER_NAME);
-				lamportServers[i] = remoteServer;
-			} catch (NotBoundException | MalformedURLException | RemoteException ex) {
-				Logger.getLogger(LamportManager.class.getName()).log(Level.SEVERE, null, ex);
-			}
+
+			ILamportAlgorithm remoteServer = (ILamportAlgorithm) Naming.lookup("//" + currentHost[0] + ":" + currentHost[1] + "/" + LAMPORT_SERVER_NAME);
+			lamportServers[i] = remoteServer;
 		}
 
 		System.out.println("Remotes connected !");
@@ -245,6 +237,7 @@ public class LamportManager {
 
 			// On met à jour les messages reçu
 			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
+
 			synchronized (lock) {
 
 				// On notifie si on souhaitait, par hasard, entrer en section critique
@@ -295,15 +288,15 @@ public class LamportManager {
 		}
 
 		System.out.println("/\n");
-		
+
 		boolean ok = true;
-		for(int j = 0; j < nbSites; j++){
-			if(j != hostIndex){
-				ok = ok && (messagesArray[hostIndex].time < messagesArray[j].time 
+		for (int j = 0; j < nbSites; j++) {
+			if (j != hostIndex) {
+				ok = ok && (messagesArray[hostIndex].time < messagesArray[j].time
 						|| (messagesArray[hostIndex].time == messagesArray[hostIndex].time && hostIndex < j));
 			}
 		}
-		
+
 		return ok;
 		/**
 		 * "Un processus Pi se donne le droit d'entrer en section critique
@@ -312,6 +305,33 @@ public class LamportManager {
 		 */
 		//return messagesArray[hostIndex].messageType == Message.MESSAGE_TYPE.REQUEST
 		//		&& messagesArray[hostIndex].time == minTime;
+	}
+
+	// ---------------- ENTRY POINT --------------------
+	public static void main(String... args) throws IOException {
+		if (args.length != 1) {
+			System.err.println("Usage: <index, starting at 0>. A hosts.txt file should be "
+					+ "in the same folder as this one");
+			System.exit(1);
+		}
+		int hostIndex = Integer.parseInt(args[0]);
+
+		// Creating 1 host and connecting to the others		
+		LamportManager lamportManager = new LamportManager(hostIndex);
+
+		// On essaie de se connecter non-stop, laisse le temps d'allumer les autres hosts
+		boolean connected = false;
+		while (!connected) {
+			connected = true;
+			try {
+				// Connecting to remotes
+				lamportManager.connectToRemotes();
+			} catch (Exception e) {
+				connected = false;
+				System.err.println("Error connectin to hosts, retrying...");
+			}
+		}
+
 	}
 
 }

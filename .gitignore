@@ -30,3 +30,7 @@ hs_err_pid*
 /Labo02_RMI/LamportManager/target/
 /Labo02_RMI/GlobalVariableClient/target/
 /Labo02_RMI/InterfacesRMI/target/
+/Labo02_RMI/GlobalVariableClient/nbproject/
+/Labo02_RMI/LamportManager/nbproject/
+/Labo02_RMI/Test/nbproject/
+/Labo02_RMI/Test/target/
