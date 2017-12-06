@@ -13,42 +13,44 @@ import java.util.logging.Logger;
  */
 public class App {
 
-   private IGlobalVariable server;
+	private IGlobalVariable server;
 
-   public App(String site) {
-      // Rechercher une reference au serveur
-      try {
-         server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");
-      } catch (MalformedURLException | NotBoundException | RemoteException e) {
-         System.out.println("Erreur avec la reference du serveur");
-         e.printStackTrace();
-         System.exit(1);
-      }
-   }
+	public App(String site) {
+		// Rechercher une reference au serveur
+		try {
+			server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");
+		} catch (MalformedURLException | NotBoundException | RemoteException e) {
+			System.out.println("Erreur avec la reference du serveur");
+			e.printStackTrace();
+			System.exit(1);
+		}
+	}
 
-   public int getGlobalVariable() throws RemoteException {
-      return server.getVariable();
-   }
+	public int getGlobalVariable() throws RemoteException {
+		return server.getVariable();
+	}
 
-   public void setGlobalValue(int value) throws RemoteException {
-      server.setVariable(value);
-   }
+	public void setGlobalValue(int value) throws RemoteException {
+		server.setVariable(value);
+	}
 
-   public static void main(String... args) {
+	public static void main(String... args) {
 
-      // Creating 5 app per server
-      //*
+		// Creating 5 app per server
+		//*
 		for (int i = 0; i < 3; i++) {
-			for (int j = 0; j < 1; j++) {
+			for (int j = 0; j < 5; j++) {
 				final App application = new App("localhost:" + (2002 + i));
-            final String name = i + " - " + j + " : ";
+				final String name = i + " - " + j + " : ";
+				final int index = i;
 				new Thread(() -> {
-               
+
 					for (int x = 0; x < 10000; x++) {
 						try {
-                     System.out.println(name + "setting value " + x);
-							application.setGlobalValue(x);
-                     System.out.println(name + "getting value ");
+							int val = x + index * 1000;
+							System.out.println(name + "setting value " + val);
+							application.setGlobalValue(val);
+							System.out.println(name + "getting value ");
 							System.out.println(name + application.getGlobalVariable());
 						} catch (RemoteException ex) {
 							Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
@@ -58,7 +60,7 @@ public class App {
 
 			}
 		}
-      /*/
+		/*/
       try {
          //System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
          //App application = new App(args[0]);
@@ -74,5 +76,5 @@ public class App {
          Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
       }
       /**/
-   }
+	}
 }
