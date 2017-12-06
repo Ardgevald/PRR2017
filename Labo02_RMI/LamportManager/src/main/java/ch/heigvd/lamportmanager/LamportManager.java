@@ -328,7 +328,7 @@ public class LamportManager {
 				lamportManager.connectToRemotes();
 			} catch (Exception e) {
 				connected = false;
-				System.err.println("Error connectin to hosts, retrying...");
+				System.err.println("Error connecting to hosts, retrying...");
 			}
 		}
 
