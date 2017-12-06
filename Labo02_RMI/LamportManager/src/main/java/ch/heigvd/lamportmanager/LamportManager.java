@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.rmi.ConnectException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
@@ -18,46 +19,96 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Classe gérant un serveur de variable global entre plusieurs serveur différent,
- * synchronisant le tout grâce à Lamport et RMI.
- * Le protocole de Lamport est fortement inspiré de la specs vue en classe,
- * adapté en java.
- * 
- * 
- * 2 méthodes peuvent être utilisées pour définir les autres serveur:
- *		1:	insérer un fichier hosts.txt à la racine du projet, de la forme:
- *			10.0.0.5 2002\n
- *			10.1.0.5 2002\n
- *			10.2.0.7 2003\n
- *			"ip"     "port"\n
- *			Ceci est la méthode préconisée si on souhaite un serveur lancé en 
- *			standalone
- *		2:	utiliser un String[][] hosts, de la forme {{"10.0.0.5", "2002"}, 
- *			{"10.0.1.3", "2003"}}. Ceci est la méthode préconisée si on souhaite
- *			tester, ou si l'utilisation d'un fichier hosts.txt n'est pas appropriée
- *			par exemple dans le cadre d'utilisation de cette classe en tant que
- *			librairie
+ * Classe gérant un serveur de variable global entre plusieurs serveur
+ * différent, synchronisant le tout grâce à Lamport et RMI. Le protocole de
+ * Lamport est fortement inspiré de la specs vue en classe, adapté en java.
+ *
+ *
+ * 2 méthodes peuvent être utilisées pour définir les autres serveur: 1:	insérer
+ * un fichier hosts.txt à la racine du projet, de la forme: 10.0.0.5 2002\n
+ * 10.1.0.5 2002\n 10.2.0.7 2003\n Correspondant à : "ip" "port"\n Ceci est la
+ * méthode préconisée si on souhaite un serveur lancé en standalone. Ce fichier
+ * pourrait être fourni et commun à tous les serveurs de variable globale de
+ * tous les sites. Seul le numéro de site, créé à l'instanciation, diffère entre
+ * les sites. 2:	utiliser un String[][] hosts, de la forme {{"10.0.0.5",
+ * "2002"}, {"10.0.1.3", "2003"}}. Ceci est la méthode préconisée si on souhaite
+ * tester, ou si l'utilisation d'un fichier hosts.txt n'est pas appropriée par
+ * exemple dans le cadre d'utilisation de cette classe en tant que librairie
+ *
+ * Notes concernant RMI : depuis quelques années, il est possible de créer un
+ * registre RMI directement en java. Ainsi, plus aucune commande n'est à taper
+ * dans le terminal afin d'exécuter ce serveur. Cette classe prends compte de
+ * cela, ce qui est la méthode maintenant préconisée. L'instanciation de cette
+ * classe créera donc un registre RMI, à l'adresse et au port indiqué dans le
+ * fichier hosts, ou en paramètre.
+ *
+ * @author Miguel Pombo Dias
+ * @author Rémi Jacquemard
  */
 public class LamportManager {
 
+	// --------------- VARIABLES ----------------
+	/**
+	 * Stock la variable globale
+	 */
 	private int globalVariable;
+
+	/**
+	 * Le nombre de site total, soit le nombre de serveur Lamport tel que
+	 * celui-ci
+	 */
 	private final int nbSites;
+
+	/**
+	 * L'index de l'hôte courant, parmis le 'nbSites'
+	 */
 	private final int hostIndex;
 
+	/**
+	 * Stock l'estampille courant du serveur. On utilise le long plutôt qu'un
+	 * int, afin d'éviter les problèmes d'overflow
+	 */
 	private long localTimeStamp = 0;
 
+	/**
+	 * La liste des serveurs Lamport RMI distant. C'est à ceux-ci qu'on se
+	 * connecte lorsqu'on souhaite demander une SC lors de la modification de la
+	 * variable globale
+	 */
 	private ILamportAlgorithm[] lamportServers;
 
+	/**
+	 * La liste de tous les sites, sous la forme {{"10.0.0.5", "2002"},
+	 * {"10.0.1.3", "2003"}}, soit {ip, port}
+	 */
+	private String[][] remotes;
+
+	/**
+	 * Cet objet sert pour lock les procédures lors d'attente au SC. On fait
+	 * attendre les demandes de modifications de variables globale si on a pas
+	 * la section critique en faisant un lock.wait(). On libère ce lock si la
+	 * section critique peut être acquise.
+	 */
 	private final Object lock = new Object();
 
-	String[][] remotes;
-
+	/**
+	 * Classe représentant les messages reçus par un site Lamport distant. Elle
+	 * est principalement utilisées afin de stocker les messages reçu dans la
+	 * "file", telle que décrite dans la spécification
+	 */
 	private static class Message {
 
+		/**
+		 * Les 3 types de messages possible de Lamport: Requête, Quittance,
+		 * Libération
+		 */
 		public static enum MESSAGE_TYPE {
 			REQUEST, RESPONSE, LIBERATE
 		};
+
 		private final MESSAGE_TYPE messageType;
+
+		// Le temps est toujours envoyé / reçu de tous le monde
 		private final long time;
 
 		public Message(MESSAGE_TYPE message_type, long time) {
@@ -65,6 +116,7 @@ public class LamportManager {
 			this.time = time;
 		}
 
+		// -------- GETTERS --------
 		public MESSAGE_TYPE getMessageType() {
 			return messageType;
 		}
@@ -75,12 +127,34 @@ public class LamportManager {
 
 	}
 
+	/**
+	 * On y stock les messages reçu des autres sites et du sien. Utile afin de
+	 * déterminer si on a le droit ou non d'entrer en section critique, tel que
+	 * l'algorithme de Lamport le défini
+	 */
 	private Message[] messagesArray;
 
+	// --------------------- CONSTRUCTEURS ---------------------
+	/**
+	 * Permet d'instancier un serveur RMI Lamport gérant une variable globale
+	 * commune à tous les serveurs RMI.
+	 *
+	 * Les hosts sont sous la forme : {{"10.0.0.5", "2002"}, {"10.0.1.3",
+	 * "2003"}}
+	 *
+	 * Le serveur instancié créera un registre RMI à l'adresse et au port
+	 * hosts[hostsIndex]
+	 *
+	 * Notons que l'instanciation de cet objet ne se connecte pas effectivement
+	 * aux autres hôtes
+	 *
+	 * @param hosts La liste des serveurs RMI Lamport disponibles
+	 * @param hostIndex L'index, à partir de 0, de l'hôte courant
+	 */
 	public LamportManager(String[][] hosts, int hostIndex) {
 		this.hostIndex = hostIndex;
 
-		globalVariable = 0;
+		this.globalVariable = 0;
 
 		this.remotes = hosts;
 		this.nbSites = remotes.length;
@@ -98,10 +172,10 @@ public class LamportManager {
 			// Retreiving our port address
 			int portUsed = Integer.parseInt(remotes[hostIndex][1]);
 
-			// Creating local server
+			// Creating local RMI servers
 			Registry registry = LocateRegistry.createRegistry(portUsed);
 
-			// On lie dans le registry
+			// On crées les serveurs RMI écoutant et on les lies au registre courant
 			IGlobalVariable globalVariableServer = new GlobalVariableServer();
 			registry.rebind(IGlobalVariable.RMI_NAME, globalVariableServer);
 
@@ -116,6 +190,21 @@ public class LamportManager {
 		}
 	}
 
+	/**
+	 * Permet d'instancier un serveur RMI Lamport gérant une variable globale
+	 * commune à tous les serveurs RMI. Lorsque ce constructeur est utilisé, un
+	 * fichier hosts.txt doit être présent. Il est de la forme : 10.0.0.5 2002\n
+	 * 10.1.0.5 2002\n 10.2.0.7 2003\n
+	 *
+	 * On définit l'hôte courant parmis les hôtes définis dans le hosts.txt par
+	 * le "hostIndex" passé en paramètre
+	 *
+	 * Notons que l'instanciation de cet objet ne se connecte pas effectivement
+	 * aux autres hôtes
+	 *
+	 * @param hostIndex le numéro d'hôte courant, à partir de 0
+	 * @throws IOException Si le fichier hosts.txt n'est pas trouvé
+	 */
 	public LamportManager(int hostIndex) throws IOException {
 		// Retreiving the other hosts from the hosts.txt file;
 		this(Files.readAllLines(Paths.get("hosts.txt")).stream()
@@ -124,7 +213,25 @@ public class LamportManager {
 
 	}
 
-	public void connectToRemotes() throws NotBoundException, MalformedURLException, RemoteException {
+	// --------------- METHODES PUBLIQUESS -------------
+	/**
+	 * Permet de se connecter effectivement aux autres hôtes en RMI Cette
+	 * méthode est différée par rapport à l'instanciation de cette classe. En
+	 * effet, il est fort probable qu'à la création de cette objet, pas tous les
+	 * autres serveur Lamport n'aient été déjà lancés. Ainsi, il est possible de
+	 * procéder en 2 étapes: 1:	Création de tous les serveurs Lamport et
+	 * ouverture des accès RMI 2:	Connection effective à tous les autres
+	 * serveurs Lamport
+	 *
+	 * @throws NotBoundException S'il y a eu un problème lors de la connexion
+	 * aux hôtes
+	 * @throws MalformedURLException Si un nom d'hôte est mal formé
+	 * @throws RemoteException Si il y a eu un problème du côté d'un hôte
+	 * distant
+	 * @throws ConnectException Si l'hôte distant est introuvable. Peut être
+	 * n'est-il pas lancé ?
+	 */
+	public void connectToRemotes() throws NotBoundException, MalformedURLException, RemoteException, ConnectException {
 		// Connecting to other hosts
 		for (int i = 0; i < remotes.length; i++) {
 			String[] currentHost = remotes[i];
@@ -136,6 +243,74 @@ public class LamportManager {
 		System.out.println("Remotes connected !");
 	}
 
+	
+	
+	
+	// -------------------------- SERVEURS RMI --------------------------
+	private class LamportAlgorithmServer extends UnicastRemoteObject implements ILamportAlgorithm {
+
+		public LamportAlgorithmServer() throws RemoteException {
+			super();
+		}
+
+		@Override
+		public synchronized long request(long remoteTimeStamp, int hostIndex) throws RemoteException {
+			increaseTime(remoteTimeStamp);
+
+			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.REQUEST, remoteTimeStamp));
+
+			// On quittance en envoyant le temps courant
+			return localTimeStamp;
+		}
+
+		@Override
+		public synchronized void free(long remoteTimeStamp, int value, int hostIndex) throws RemoteException {
+			globalVariable = value;
+
+			// On met à jour le temps local
+			increaseTime(remoteTimeStamp);
+
+			// On met à jour les messages reçu
+			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
+
+			synchronized (lock) {
+
+				// On notifie si on souhaitait, par hasard, entrer en section critique
+				lock.notify();
+
+			}
+		}
+
+	}
+
+	private class GlobalVariableServer extends UnicastRemoteObject implements IGlobalVariable {
+
+		public GlobalVariableServer() throws RemoteException {
+			super();
+		}
+
+		@Override
+		public synchronized int getVariable() throws RemoteException {
+			return globalVariable;
+		}
+
+		@Override
+		public synchronized void setVariable(int value) throws RemoteException {
+			System.out.println(hostIndex + " : WaitForCS");
+			// Demande de section critique
+			waitForCS();
+			System.out.println(hostIndex + " : InCS - ");
+			// On est ici en section critique
+			globalVariable = value;
+
+			// Relachement de la section critique				
+			releaseCS();
+			System.out.println(hostIndex + " : ReleaseCS - ");
+		}
+
+	}
+
+	// ------------ METHODES UTILITAIRES PRIVEES ------------
 	private void sendRequestsAndProcessResponse(final long localTimeStamp) throws InterruptedException {
 		// On set notre message courant
 		messagesArray[hostIndex] = new Message(Message.MESSAGE_TYPE.REQUEST, localTimeStamp);
@@ -189,75 +364,11 @@ public class LamportManager {
 		localTimeStamp = Math.max(localTimeStamp, remoteTimeStamp) + 1;
 	}
 
-	private class GlobalVariableServer extends UnicastRemoteObject implements IGlobalVariable {
-
-		public GlobalVariableServer() throws RemoteException {
-			super();
-		}
-
-		@Override
-		public synchronized int getVariable() throws RemoteException {
-			return globalVariable;
-		}
-
-		@Override
-		public synchronized void setVariable(int value) throws RemoteException {
-			System.out.println(hostIndex + " : WaitForCS");
-			// Demande de section critique
-			waitForCS();
-			System.out.println(hostIndex + " : InCS - ");
-			// On est ici en section critique
-			globalVariable = value;
-
-			// Relachement de la section critique				
-			releaseCS();
-			System.out.println(hostIndex + " : ReleaseCS - ");
-		}
-
-	}
-
 	private void handleMessageReceived(int hostIndex, Message message) {
 		System.out.println(this.hostIndex + " reveived : " + hostIndex + " " + message.messageType);
 		// On replace pas les messages de type requêtes par une quittance
 		if (message.messageType != Message.MESSAGE_TYPE.RESPONSE || messagesArray[hostIndex].messageType != Message.MESSAGE_TYPE.REQUEST) {
 			messagesArray[hostIndex] = message;
-		}
-
-	}
-
-	private class LamportAlgorithmServer extends UnicastRemoteObject implements ILamportAlgorithm {
-
-		public LamportAlgorithmServer() throws RemoteException {
-			super();
-		}
-
-		@Override
-		public synchronized long request(long remoteTimeStamp, int hostIndex) throws RemoteException {
-			increaseTime(remoteTimeStamp);
-
-			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.REQUEST, remoteTimeStamp));
-
-			// On quittance en envoyant le temps courant
-			return localTimeStamp;
-		}
-
-		@Override
-		public synchronized void free(long remoteTimeStamp, int value, int hostIndex) throws RemoteException {
-			globalVariable = value;
-
-			// On met à jour le temps local
-			increaseTime(remoteTimeStamp);
-
-			// On met à jour les messages reçu
-			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
-
-			synchronized (lock) {
-
-				// On notifie si on souhaitait, par hasard, entrer en section critique
-				//if (canEnterCS()) {
-				lock.notify();
-				//}
-			}
 		}
 
 	}
@@ -302,6 +413,11 @@ public class LamportManager {
 
 		System.out.println("/\n");
 
+		/**
+		 * "Un processus Pi se donne le droit d'entrer en section critique
+		 * lorsque file(i).msgType = REQUETE et que son estampille est la plus
+		 * ancienne des messages contenus dans file(i)."
+		 */
 		boolean ok = true;
 		for (int j = 0; j < nbSites; j++) {
 			if (j != hostIndex) {
@@ -311,13 +427,6 @@ public class LamportManager {
 		}
 
 		return ok;
-		/**
-		 * "Un processus Pi se donne le droit d'entrer en section critique
-		 * lorsque file(i).msgType = REQUETE et que son estampille est la plus
-		 * ancienne des messages contenus dans file(i)."
-		 */
-		//return messagesArray[hostIndex].messageType == Message.MESSAGE_TYPE.REQUEST
-		//		&& messagesArray[hostIndex].time == minTime;
 	}
 
 	// ---------------- ENTRY POINT --------------------

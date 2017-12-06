@@ -55,7 +55,7 @@ public class Client {
 
 	/**
 	 * Permet de modifier la variable global stockée sur le serveur RMI ainsi 
-	 * que sur tous les serveurs RMI distant
+	 * que sur tous les serveurs RMI distant. Est bloquant (attente de la SC)
 	 * @param value la nouvelle valeur de la variable
 	 * @throws RemoteException s'il y a eu une erreur lors de la modification 
 	 * de la variable
