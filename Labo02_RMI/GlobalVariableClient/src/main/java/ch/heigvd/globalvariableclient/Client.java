@@ -1,6 +1,10 @@
 package ch.heigvd.globalvariableclient;
 
 import ch.heigvd.interfacesrmi.IGlobalVariable;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
@@ -9,12 +13,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Cette classe représente un client de variable grobale, 
- * qui se connectera à un serveur RMI Lamport passé en paramètre
- * Cette classe peut être incluse dans une application en tant que librairie,
- * ce qui permettrait facilement d'avoir une variable globale commune à plusieurs
- * application
- * 
+ * Cette classe représente un client de variable grobale, qui se connectera à un
+ * serveur RMI Lamport passé en paramètre Cette classe peut être incluse dans
+ * une application en tant que librairie, ce qui permettrait facilement d'avoir
+ * une variable globale commune à plusieurs application
+ *
  * @author Miguel Pombo Dias
  * @author Rémi Jacquemard
  */
@@ -26,8 +29,9 @@ public class Client {
 	private IGlobalVariable server;
 
 	/**
-	 * Permet de créer un client qui se connecte à un serveur gérant des variables
-	 * gobales en RMI passé en paramètre
+	 * Permet de créer un client qui se connecte à un serveur gérant des
+	 * variables gobales en RMI passé en paramètre
+	 *
 	 * @param site le site sur lequel se connecter, de la forme "10.2.3.4:2002"
 	 * @throws MalformedURLException Si l'url n'est pas bon
 	 * @throws RemoteException Si il y a un problème avec la connexion du site
@@ -45,65 +49,90 @@ public class Client {
 
 	/**
 	 * Permet de récupérer la variable global à partir du serveur en RMI
+	 *
 	 * @return la variable gobal
-	 * @throws RemoteException s'il y a eu une erreur lors de la récupèration 
-	 * de la variable
+	 * @throws RemoteException s'il y a eu une erreur lors de la récupèration de
+	 * la variable
 	 */
 	public int getGlobalVariable() throws RemoteException {
 		return server.getVariable();
 	}
 
 	/**
-	 * Permet de modifier la variable global stockée sur le serveur RMI ainsi 
+	 * Permet de modifier la variable global stockée sur le serveur RMI ainsi
 	 * que sur tous les serveurs RMI distant. Est bloquant (attente de la SC)
+	 *
 	 * @param value la nouvelle valeur de la variable
-	 * @throws RemoteException s'il y a eu une erreur lors de la modification 
-	 * de la variable
+	 * @throws RemoteException s'il y a eu une erreur lors de la modification de
+	 * la variable
 	 */
 	public void setGlobalValue(int value) throws RemoteException {
 		server.setVariable(value);
 	}
 
-	
-	
-	
 	// ------------- ENTRY POINT -----------
 	/**
-	 * Permet de lancer un client temporaire d'un serveur de variable global en standalone
-	 * Il doit y avoir au minimum 2 arguments:
-	 *		1: le host (adresse IP ou hostName), sous la forme "10.0.0.5"
-	 *		2: le port RMI utilisé, tel que 2000
-	 * 
-	 * Sans 3ème argument fourni, cet appel ne fait que récupérer la valeur de la
-	 * variable global actuelle.
-	 * Avec un 3ème argument, on peut y spécifier la nouvelle valeur de la variable
-	 * globale, un entier, tel que '52'
+	 * Permet de lancer un client temporaire d'un serveur de variable global en
+	 * standalone Il doit y avoir au minimum 2 arguments: 1: le host (adresse IP
+	 * ou hostName), sous la forme "10.0.0.5" 2: le port RMI utilisé, tel que
+	 * 2000
+	 *
+	 * Sans 3ème argument fourni, cet appel ne fait que récupérer la valeur de
+	 * la variable global actuelle. Avec un 3ème argument, on peut y spécifier
+	 * la nouvelle valeur de la variable globale, un entier, tel que '52'
+	 *
 	 * @param args les paramètres du client
 	 */
 	public static void main(String... args) {
 		try {
 			String host = args[0];
 			String port = args[1];
-			Integer value = null;
-			if (args.length == 3) {
-				value = Integer.parseInt(args[2]);
-			}
 
 			Client application = new Client(host + ":" + port);
-			System.out.println("global value : " + application.getGlobalVariable());
+			System.out.println("Connected to " + host + ":" + port);
+			
+			
+			BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
+			boolean cont = true;
+			do {
+				System.out.println("1 : show current value");
+				System.out.println("2 : set current value");;
+				System.out.println("q : quit");
+				System.out.print("> ");
+				
+				
+				
+				switch(r.readLine()){
+					case "1":
+						System.out.println("current value is : " + application.getGlobalVariable());
+						break;
+					case "2":
+						System.out.print("Enter new value : ");
+						int value = Integer.parseInt(r.readLine());
+						System.out.println("current value is : " + application.getGlobalVariable());
+						System.out.println("setting new value");
+						application.setGlobalValue(value);
+						System.out.println("new value is : " + application.getGlobalVariable());
+						break;
+					case "q":
+						cont = false;
+					default:
+						System.out.println("Bad input, please retry...");
+						break;
+				}
+				
+				
+			} while (cont);
 
-			if (value != null) {
-				application.setGlobalValue(value);
-				System.out.println("global value after setting : " + application.getGlobalVariable());
-			}
 		} catch (IndexOutOfBoundsException e) {
 			System.err.println("Usage: <hostName> <port> [<value to set>]");
 			System.exit(1);
 		} catch (RemoteException | MalformedURLException | NotBoundException ex) {
 			Logger.getLogger(Client.class
 					.getName()).log(Level.SEVERE, null, ex);
+		} catch (IOException ex) {
+			Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
 		}
 
 	}
 }
-
