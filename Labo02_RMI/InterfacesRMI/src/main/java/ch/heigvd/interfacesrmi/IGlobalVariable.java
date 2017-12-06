@@ -10,4 +10,6 @@ import java.rmi.RemoteException;
 public interface IGlobalVariable extends Remote{
    public int getVariable() throws RemoteException;
    public void setVariable(int value)  throws RemoteException;
+   
+   public static final String RMI_NAME = "GlobalVariable";
 }

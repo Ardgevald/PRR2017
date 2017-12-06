@@ -36,7 +36,7 @@ public class Client {
 	public Client(String site) throws MalformedURLException, RemoteException, NotBoundException {
 		// Rechercher une reference au serveur
 		try {
-			server = (IGlobalVariable) Naming.lookup("//" + site + "/GlobalVariable");
+			server = (IGlobalVariable) Naming.lookup("//" + site + "/" + IGlobalVariable.RMI_NAME);
 		} catch (MalformedURLException | NotBoundException | RemoteException e) {
 			System.err.println("Erreur avec la reference du serveur");
 			throw e;

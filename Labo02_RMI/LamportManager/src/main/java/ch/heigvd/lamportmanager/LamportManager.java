@@ -18,14 +18,27 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- *
+ * Classe gérant un serveur de variable global entre plusieurs serveur différent,
+ * synchronisant le tout grâce à Lamport et RMI.
+ * Le protocole de Lamport est fortement inspiré de la specs vue en classe,
+ * adapté en java.
+ * 
+ * 
+ * 2 méthodes peuvent être utilisées pour définir les autres serveur:
+ *		1:	insérer un fichier hosts.txt à la racine du projet, de la forme:
+ *			10.0.0.5 2002\n
+ *			10.1.0.5 2002\n
+ *			10.2.0.7 2003\n
+ *			"ip"     "port"\n
+ *			Ceci est la méthode préconisée si on souhaite un serveur lancé en 
+ *			standalone
+ *		2:	utiliser un String[][] hosts, de la forme {{"10.0.0.5", "2002"}, 
+ *			{"10.0.1.3", "2003"}}. Ceci est la méthode préconisée si on souhaite
+ *			tester, ou si l'utilisation d'un fichier hosts.txt n'est pas appropriée
+ *			par exemple dans le cadre d'utilisation de cette classe en tant que
+ *			librairie
  */
 public class LamportManager {
-
-	private static final Logger LOG = Logger.getLogger(LamportManager.class.getName());
-
-	private final static String VARIABLE_SERVER_NAME = "GlobalVariable";
-	private final static String LAMPORT_SERVER_NAME = "Lamport";
 
 	private int globalVariable;
 	private final int nbSites;
@@ -90,10 +103,10 @@ public class LamportManager {
 
 			// On lie dans le registry
 			IGlobalVariable globalVariableServer = new GlobalVariableServer();
-			registry.rebind(VARIABLE_SERVER_NAME, globalVariableServer);
+			registry.rebind(IGlobalVariable.RMI_NAME, globalVariableServer);
 
 			ILamportAlgorithm lamportAlgorithmServer = new LamportAlgorithmServer();
-			registry.rebind(LAMPORT_SERVER_NAME, lamportAlgorithmServer);
+			registry.rebind(ILamportAlgorithm.RMI_NAME, lamportAlgorithmServer);
 
 			System.out.println("RMI registry on " + portUsed + " with bindings:");
 			Arrays.stream(registry.list()).forEach(System.out::println);
@@ -116,7 +129,7 @@ public class LamportManager {
 		for (int i = 0; i < remotes.length; i++) {
 			String[] currentHost = remotes[i];
 
-			ILamportAlgorithm remoteServer = (ILamportAlgorithm) Naming.lookup("//" + currentHost[0] + ":" + currentHost[1] + "/" + LAMPORT_SERVER_NAME);
+			ILamportAlgorithm remoteServer = (ILamportAlgorithm) Naming.lookup("//" + currentHost[0] + ":" + currentHost[1] + "/" + ILamportAlgorithm.RMI_NAME);
 			lamportServers[i] = remoteServer;
 		}
 

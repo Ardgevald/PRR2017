@@ -10,4 +10,6 @@ import java.rmi.RemoteException;
 public interface ILamportAlgorithm extends Remote{
    public long request(long localTimeStamp, int hostIndex) throws RemoteException;
    public void free(long localTimeStamp, int value, int hostIndex) throws RemoteException;
+   
+   public static final String RMI_NAME = "Lamport";
 }
