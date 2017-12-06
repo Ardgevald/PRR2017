@@ -2,6 +2,7 @@ package ch.heigvd.lamportmanager;
 
 import ch.heigvd.interfacesrmi.IGlobalVariable;
 import ch.heigvd.interfacesrmi.ILamportAlgorithm;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -29,8 +30,6 @@ public class LamportManager {
    private int globalVariable;
    private final int nbSites;
    private final int hostIndex;
-
-   int count = 0;
 
    private long localTimeStamp = 0;
 
@@ -100,9 +99,10 @@ public class LamportManager {
          int portUsed = Integer.parseInt(remotes[hostIndex][1]);
 
          // Creating local server
-         IGlobalVariable globalVariableServer = new GlobalVariableServer();
-         // On lie dans le registry
          Registry registry = LocateRegistry.createRegistry(portUsed);
+         
+         // On lie dans le registry
+         IGlobalVariable globalVariableServer = new GlobalVariableServer();
          registry.rebind(VARIABLE_SERVER_NAME, globalVariableServer);
 
          ILamportAlgorithm lamportAlgorithmServer = new LamportAlgorithmServer();
@@ -131,7 +131,7 @@ public class LamportManager {
       System.out.println("Remotes connected !");
    }
 
-   private synchronized void sendRequestsAndProcessResponse(final long localTimeStamp) throws InterruptedException {
+   private void sendRequestsAndProcessResponse(final long localTimeStamp) throws InterruptedException {
       // On set notre message courant
       messagesArray[hostIndex] = new Message(Message.MESSAGE_TYPE.REQUEST, localTimeStamp);
 
@@ -196,14 +196,13 @@ public class LamportManager {
          System.out.println(hostIndex + " : WaitForCS");
          // Demande de section critique
          waitForCS();
-
-         System.out.println(hostIndex + " : InCS");
+         System.out.println(hostIndex + " : InCS - ");
          // On est ici en section critique
          globalVariable = value;
 
          // Relachement de la section critique				
          releaseCS();
-         System.out.println(hostIndex + " : ReleaseCS");
+         System.out.println(hostIndex + " : ReleaseCS - ");
       }
 
    }
@@ -234,17 +233,19 @@ public class LamportManager {
 
       @Override
       public void free(long remoteTimeStamp, int value, int hostIndex) throws RemoteException {
+         globalVariable = value;
+
+         // On met à jour le temps local
+         increaseTime(remoteTimeStamp);
+
          synchronized (lock) {
-            globalVariable = value;
-
-            // On met à jour le temps local
-            increaseTime(remoteTimeStamp);
-
             // On met à jour les messages reçu
             handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
 
             // On notifie si on souhaitait, par hasard, entrer en section critique
-            lock.notify();
+            if (canEnterCS()) {
+               lock.notify();
+            }
          }
       }
 
@@ -253,13 +254,12 @@ public class LamportManager {
    private void waitForCS() {
       try {
          sendRequestsAndProcessResponse(localTimeStamp);
-
          /*
          * On calcule si on peut entrer en SC
          * On reste bloqué tant qu'on peut pas entrer en SC
           */
          synchronized (lock) {
-            while (!canEnterCS()) {
+            if (!canEnterCS()) {
                // Attendre jusqu'à ce qu'on soit notifié lors de l'arrivée d'un message
                lock.wait();
             }
@@ -280,12 +280,16 @@ public class LamportManager {
 
    private boolean canEnterCS() {
       long minTime = Long.MAX_VALUE;
+      System.out.print(hostIndex);
       for (Message message : messagesArray) {
          if (message.time < minTime) {
             minTime = message.time;
          }
+         
+         System.out.print("[" + message.messageType + "-" + message.time + "]");
       }
 
+         System.out.println("/\n");
       /**
        * "Un processus Pi se donne le droit d'entrer en section critique lorsque
        * file(i).msgType = REQUETE et que son estampille est la plus ancienne des

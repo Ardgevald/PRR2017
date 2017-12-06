@@ -39,12 +39,12 @@ public class App {
       // Creating 5 app per server
       //*
 		for (int i = 0; i < 3; i++) {
-			for (int j = 0; j < 5; j++) {
+			for (int j = 0; j < 1; j++) {
 				final App application = new App("localhost:" + (2002 + i));
             final String name = i + " - " + j + " : ";
 				new Thread(() -> {
                
-					for (int x = 0; x < 1000; x++) {
+					for (int x = 0; x < 10000; x++) {
 						try {
                      System.out.println(name + "setting value " + x);
 							application.setGlobalValue(x);
@@ -57,8 +57,8 @@ public class App {
 				}).start();
 
 			}
-		}//*/
-      /*
+		}
+      /*/
       try {
          //System.setProperty("java.security.policy", "file:./ch/heigvd/globalvariableclient/client.policy");
          //App application = new App(args[0]);
@@ -72,6 +72,7 @@ public class App {
          System.exit(1);
       } catch (RemoteException ex) {
          Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-      }//*/
+      }
+      /**/
    }
 }
