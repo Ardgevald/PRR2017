@@ -47,6 +47,10 @@ import java.util.logging.Logger;
  * tester, ou si l'utilisation d'un fichier hosts.txt n'est pas appropriée par
  * exemple dans le cadre d'utilisation de cette classe en tant que librairie
  *
+ * On part du principe que les différents serveurs sont lancés et prêts à
+ * fonctionner avant que les clients ne commencent à faire des requêtes sur les
+ * serveurs. 
+ * 
  * Notes concernant RMI : depuis quelques années, il est possible de créer un
  * registre RMI directement en java. Ainsi, plus aucune commande n'est à taper
  * dans le terminal afin d'exécuter ce serveur. Cette classe prend compte de
@@ -290,7 +294,7 @@ public class LamportManager {
 			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
 
 			synchronized (lock) {
-
+            if(canEnterCS())
 				// On notifie si on souhaitait, par hasard, entrer en section critique
 				lock.notify();
 
@@ -434,7 +438,7 @@ public class LamportManager {
 			 * On calcule si on peut entrer en SC
 			 * On reste bloqué tant qu'on peut pas entrer en SC
 			 */
-			while (!canEnterCS()) {
+			if (!canEnterCS()) {
 				synchronized (lock) {
 					// Attendre jusqu'à ce qu'on soit notifié
                // lors de l'arrivée d'un message
