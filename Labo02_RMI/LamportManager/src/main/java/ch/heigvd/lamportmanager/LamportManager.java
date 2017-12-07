@@ -280,7 +280,7 @@ public class LamportManager {
 		}
 
 		@Override
-		public synchronized void free(long remoteTimeStamp, int value, int hostIndex) throws RemoteException {
+		public void free(long remoteTimeStamp, int value, int hostIndex) throws RemoteException {
 			globalVariable = value;
 
 			// On met à jour le temps local
