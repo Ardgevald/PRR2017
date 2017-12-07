@@ -27,25 +27,24 @@ import java.util.logging.Logger;
  * 2 méthodes peuvent être utilisées pour définir les autres serveur:
  * 
  * 1:	insérer un fichier hosts.txt à la racine du projet, de la forme:
- *    10.0.0.5 2002
- *    10.1.0.5 2002
- *    10.2.0.7 2003
+ *			10.0.0.5 2002
+ *			10.1.0.5 2002
+ *			10.2.0.7 2003
+ *		Correspondant à :
+ *			"ip" "port"
  * 
- * Correspondant à :
- *    "ip" "port"
- * 
- * Ceci est la méthode préconisée si on souhaite un serveur lancé en
- * standalone. Ce fichier pourrait être fourni et commun à tous les serveurs de 
- * variable globale de tous les sites.
- * Seul le numéro de site, créé à l'instanciation, diffère entre
- * les sites.
+ *		Ceci est la méthode préconisée si on souhaite un serveur lancé en
+ *		standalone. Ce fichier pourrait être fourni et commun à tous les serveurs de 
+ *		variable globale de tous les sites.
+ *		Seul le numéro de site, créé à l'instanciation, diffère entre
+ *		les sites.
  * 
  * 2:	utiliser un String[][] hosts, de la forme
- *    {{"10.0.0.5", "2002"}, {"10.0.1.3", "2003"}}.
+ *			{{"10.0.0.5", "2002"}, {"10.0.1.3", "2003"}}.
  * 
- * Ceci est la méthode préconisée si on souhaite
- * tester, ou si l'utilisation d'un fichier hosts.txt n'est pas appropriée par
- * exemple dans le cadre d'utilisation de cette classe en tant que librairie
+ *		Ceci est la méthode préconisée si on souhaite
+ *		tester, ou si l'utilisation d'un fichier hosts.txt n'est pas appropriée par
+ *		exemple dans le cadre d'utilisation de cette classe en tant que librairie
  *
  * On part du principe que les différents serveurs sont lancés et prêts à
  * fonctionner avant que les clients ne commencent à faire des requêtes sur les
