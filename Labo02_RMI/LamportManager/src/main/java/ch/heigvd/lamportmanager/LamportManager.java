@@ -23,7 +23,6 @@ import java.util.logging.Logger;
  * différent, synchronisant le tout grâce à Lamport et RMI. Le protocole de
  * Lamport est fortement inspiré de la specs vue en classe, adapté en java.
  *
- *
  * 2 méthodes peuvent être utilisées pour définir les autres serveur:
  * 
  * 1:	insérer un fichier hosts.txt à la racine du projet, de la forme:
@@ -45,7 +44,7 @@ import java.util.logging.Logger;
  *		Ceci est la méthode préconisée si on souhaite
  *		tester, ou si l'utilisation d'un fichier hosts.txt n'est pas appropriée par
  *		exemple dans le cadre d'utilisation de cette classe en tant que librairie
- *
+ * 
  * On part du principe que les différents serveurs sont lancés et prêts à
  * fonctionner avant que les clients ne commencent à faire des requêtes sur les
  * serveurs. 

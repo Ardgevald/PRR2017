@@ -104,8 +104,7 @@ public class Client {
 					case "2":
 						System.out.print("Enter new value : ");
 						int value = Integer.parseInt(r.readLine());
-						System.out.println("current value is : " + application.getGlobalVariable());
-						System.out.println("setting new value");
+						System.out.println("waiting access to critical section for new value");
 						application.setGlobalValue(value);
 						System.out.println("new value is : " + application.getGlobalVariable());
 						break;
