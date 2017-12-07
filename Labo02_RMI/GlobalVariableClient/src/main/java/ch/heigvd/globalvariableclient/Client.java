@@ -4,7 +4,6 @@ import ch.heigvd.interfacesrmi.IGlobalVariable;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.Reader;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
@@ -78,13 +77,8 @@ public class Client {
     * 2: le port RMI utilisé, tel que 2000
 	 *
     * il est ensuite possible en console de lire ou écrire la variable
-    * partagée en suivant les instructions affichées.    * 
+    * partagée en suivant les instructions affichées.
     * 
-    * TODO : remove ?
-	 * Sans 3ème argument fourni, cet appel ne fait que récupérer la valeur de
-	 * la variable global actuelle. Avec un 3ème argument, on peut y spécifier
-	 * la nouvelle valeur de la variable globale, un entier, tel que '52'
-	 *
 	 * @param args les paramètres du client
 	 */
 	public static void main(String... args) {
@@ -99,7 +93,7 @@ public class Client {
 			boolean cont = true;
 			do {
 				System.out.println("1 : show current value");
-				System.out.println("2 : set current value");;
+				System.out.println("2 : set current value");
 				System.out.println("q : quit");
 				System.out.print("> ");
 				
@@ -125,16 +119,13 @@ public class Client {
 				
 				
 			} while (cont);
-
+         
 		} catch (IndexOutOfBoundsException e) {
 			System.err.println("Usage: <hostName> <port> [<value to set>]");
-		} catch (RemoteException | MalformedURLException | NotBoundException ex) {
-			Logger.getLogger(Client.class
-					.getName()).log(Level.SEVERE, null, ex);
-		} catch (IOException ex) {
-			Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-		} finally {
          System.exit(1);
-      }
+		} catch (NotBoundException | IOException ex) {
+			Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+         System.exit(1);
+		}
 	}
 }

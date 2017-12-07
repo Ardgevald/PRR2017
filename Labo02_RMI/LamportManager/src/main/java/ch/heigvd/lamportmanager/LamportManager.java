@@ -262,9 +262,6 @@ public class LamportManager {
 		System.out.println("Remotes connected !");
 	}
 
-	
-	
-	
 	// -------------------------- SERVEURS RMI --------------------------
 	private class LamportAlgorithmServer extends UnicastRemoteObject implements ILamportAlgorithm {
 
@@ -293,10 +290,8 @@ public class LamportManager {
 			handleMessageReceived(hostIndex, new Message(Message.MESSAGE_TYPE.LIBERATE, remoteTimeStamp));
 
 			synchronized (lock) {
-            if(canEnterCS())
 				// On notifie si on souhaitait, par hasard, entrer en section critique
 				lock.notify();
-
 			}
 		}
 
@@ -315,16 +310,15 @@ public class LamportManager {
 
 		@Override
 		public synchronized void setVariable(int value) throws RemoteException {
-			System.out.println(hostIndex + " : WaitForCS");
 			// Demande de section critique
 			waitForCS();
-			System.out.println(hostIndex + " : InCS - ");
 			// On est ici en section critique
+         System.out.println("\tOld value : " + globalVariable);
 			globalVariable = value;
+         System.out.println("\tNew value : " + globalVariable);
 
 			// Relachement de la section critique				
 			releaseCS();
-			System.out.println(hostIndex + " : ReleaseCS - ");
 		}
 
 	}
@@ -416,7 +410,6 @@ public class LamportManager {
     * logique associé au message.
     */
 	private void handleMessageReceived(int hostIndex, Message message) {
-		System.out.println(this.hostIndex + " reveived : " + hostIndex + " " + message.messageType);
 		// Si on reçoit une quittance et qu'il y a une requête dans la file, on
       // ne remplace pas le message
 		if (message.messageType != Message.MESSAGE_TYPE.RESPONSE || messagesArray[hostIndex].messageType != Message.MESSAGE_TYPE.REQUEST) {
@@ -437,7 +430,7 @@ public class LamportManager {
 			 * On calcule si on peut entrer en SC
 			 * On reste bloqué tant qu'on peut pas entrer en SC
 			 */
-			if (!canEnterCS()) {
+			while (!canEnterCS()) {
 				synchronized (lock) {
 					// Attendre jusqu'à ce qu'on soit notifié
                // lors de l'arrivée d'un message
@@ -470,16 +463,12 @@ public class LamportManager {
     */
 	private boolean canEnterCS() {
 		long minTime = Long.MAX_VALUE;
-		System.out.print(hostIndex);
 		for (Message message : messagesArray) {
 			if (message.time < minTime) {
 				minTime = message.time;
 			}
 
-			System.out.print("[" + message.messageType + "-" + message.time + "]");
 		}
-
-		System.out.println("/\n");
 
 		/**
 		 * "Un processus Pi se donne le droit d'entrer en section critique
@@ -498,7 +487,14 @@ public class LamportManager {
 	}
 
 	// ---------------- ENTRY POINT --------------------
-   // TODO: ajouter un nombre d'essais limité ?
+   /**
+    * Pour utiliser le .jar, il faut le lancer avec le numéro du site.
+    * Il doit également y avoir un fichier hosts.txt comme décrit dans
+    * le header de la classe
+    * 
+    * @param args          Dois contenir un seul argument numérique entier
+    * @throws IOException  S'il y a un problème avec la lecture du fichier hosts.txt
+    */
 	public static void main(String... args) throws IOException {
 		if (args.length != 1) {
 			System.err.println("Usage: <index, starting at 0>. A hosts.txt file should be "

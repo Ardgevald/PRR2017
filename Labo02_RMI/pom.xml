@@ -9,7 +9,6 @@
         <module>LamportManager</module>
         <module>GlobalVariableClient</module>
         <module>InterfacesRMI</module>
-        <module>Test</module>
     </modules>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
