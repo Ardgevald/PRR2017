@@ -312,9 +312,9 @@ public class LamportManager {
 			// Demande de section critique
 			waitForCS();
 			// On est ici en section critique
-         System.out.println("\tOld value : " + globalVariable);
+         System.out.println("\t[" + hostIndex + "] Old value : " + globalVariable);
 			globalVariable = value;
-         System.out.println("\tNew value : " + globalVariable);
+         System.out.println("\t[" + hostIndex + "] New value : " + globalVariable);
 
 			// Relachement de la section critique				
 			releaseCS();

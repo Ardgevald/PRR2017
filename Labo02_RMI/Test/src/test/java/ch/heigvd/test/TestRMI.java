@@ -20,7 +20,8 @@ public class TestRMI {
 
    @Before
    public void setUp() throws IOException {
-      // Creating 3 hosts locally
+      // on crée trois serveurs locaux afin de tester d'éventuels problèmes
+      // de concurrence
       String[][] hosts = {
          {"localhost", "2002"},
          {"localhost", "2003"},
@@ -32,7 +33,7 @@ public class TestRMI {
          lamportManagers[i] = new LamportManager(hosts, i);
       }
 
-      // Connecting hosts
+      // on connecte les sites entre eux avant de tester
       Arrays.stream(lamportManagers).forEach((lamportManager) -> {
          try {
             lamportManager.connectToRemotes();
@@ -45,9 +46,11 @@ public class TestRMI {
    @Test
    public void test() throws MalformedURLException, RemoteException, NotBoundException {
 
-		// Testing procedure
-      // Creating 5 app per server
-      //*
+		/**
+       * Procédure de test
+       * On crée 5 threads par serveur, et chacun va faire des lectures et écritures
+       * sur un des trois serveurs en boucle.
+       */
       ArrayList<Thread> threads = new ArrayList<>();
 
       for (int i = 0; i < 3; i++) {
@@ -57,14 +60,13 @@ public class TestRMI {
             final int index = i;
             Thread t = new Thread(() -> {
 
-               for (int x = 0; x < 5000; x++) {
+               for (int x = 0; x < 1000; x++) {
                   try {
                      int val = x + index * 1000;
-                     System.out.println(name + "setting value " + val);
+                     System.out.println(name + "wants to set value " + val);
                      application.setGlobalValue(val);
-                     System.out.println(name + "getting value ");
-                     System.out.println(name + application.getGlobalVariable());
-                  } catch (RemoteException ex) { // The server could be momentaly full
+                     System.out.println(name + "getting value " + application.getGlobalVariable());
+                  } catch (RemoteException ex) {
                      Logger.getLogger(TestRMI.class.getName()).log(Level.SEVERE, null, ex);
                   }
                }
@@ -75,7 +77,10 @@ public class TestRMI {
 
       }
 
-      // Waiting fot the threads to finish
+      // On attend la fin des threads ce qui confirme qu'il
+      // n'y a pas eu de blocage.
+      // les affichages des serveurs permettent de constater que
+      // les accès à la variable partagée se font en section critique
       threads.stream().forEach((thread) -> {
          try {
             thread.join();
