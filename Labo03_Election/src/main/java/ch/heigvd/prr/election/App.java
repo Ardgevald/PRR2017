@@ -13,6 +13,12 @@ import java.io.IOException;
  */
 public class App {
 	public static void main(String ... args) throws IOException{
-		ElectionManager electionManager = new ElectionManager(0);
+		// UTiliser les tryWithRessource ici
+		ElectionManager electionManager1 = new ElectionManager((byte)0);
+		ElectionManager electionManager2 = new ElectionManager((byte)1);
+		System.out.println("Election manager running");
+		
+		electionManager1.startElection();
+		
 	}
 }
