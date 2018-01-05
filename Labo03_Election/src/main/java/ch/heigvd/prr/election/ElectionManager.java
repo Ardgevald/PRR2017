@@ -1,5 +1,9 @@
 package ch.heigvd.prr.election;
 
+import ch.heigvd.prr.election.Message.AnnounceMessage;
+import ch.heigvd.prr.election.Message.MessageType;
+import ch.heigvd.prr.election.Message.QuittanceMessage;
+import ch.heigvd.prr.election.Message.ResultsMessage;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -9,6 +13,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -23,6 +28,8 @@ import util.ByteIntConverter;
  */
 public class ElectionManager implements Closeable {
 
+	private static final int QUITTANCE_TIMEOUT = 1000;
+
 	private LinkedList<Site> ring;
 	private Site[] hosts;
 	private final Site localSite;
@@ -34,11 +41,13 @@ public class ElectionManager implements Closeable {
 
 	private DatagramSocket socket;
 
+	private Object locker = new Object();
+
 	private void log(String s) {
 		System.out.println(String.format("%s (%s:%d): %s",
 			"ElectionManager",
-			localSite.socketAddress.getAddress().getHostAddress(),
-			localSite.socketAddress.getPort(),
+			localSite.getSocketAddress().getAddress().getHostAddress(),
+			localSite.getSocketAddress().getPort(),
 			s));
 	}
 
@@ -49,21 +58,16 @@ public class ElectionManager implements Closeable {
 	 * @param hostIndex
 	 * @throws SocketException
 	 */
-	public ElectionManager(Site[] hosts, byte hostIndex) throws SocketException {
+	public ElectionManager(Site[] hosts, byte hostIndex) throws SocketException, IOException {
 		this.hosts = hosts;
 		this.localSite = hosts[hostIndex];
 		this.localHostIndex = hostIndex;
 
 		log("Starting Election Manager");
 
-		// Getting the neighbor
-		neighbor = hosts[(hostIndex + 1) % hosts.length];
-
-		System.out.println(localSite.socketAddress.getAddress().getHostAddress());
-
 		log("Creating DatagramSocket");
 		// Creating the main socket
-		socket = new DatagramSocket(localSite.socketAddress);
+		socket = new DatagramSocket(localSite.getSocketAddress());
 
 		this.electionListener = new Thread(() -> {
 			while (true) {
@@ -72,70 +76,96 @@ public class ElectionManager implements Closeable {
 
 					// We are waiting for an income packet
 					log("Waiting for entering packet");
-					socket.receive(packet);
 
-					byte[] data = packet.getData();
+					Message message = receiveMessage();
+					MessageType messageType = message.getMessageType();
 
-					MessageType messageType = MessageType.getMessageType(data[0]);
+					// On transmet la quittance
+					QuittanceMessage quittanceMessage = new QuittanceMessage();
+					sendMessage(quittanceMessage, packet.getSocketAddress());
+					
+					// On gère le message reçu
+					synchronized (locker) {
+						switch (messageType) {
+							case ANNOUNCE:
+								log("ANNOUNCE received");
+								AnnounceMessage announceMessage = (AnnounceMessage) message;
+								if (isAnnouncing) {
+									log("2nd time I received this message");
+									// On recoit pour la deuxième fois l'annonce, on doit chercher l'élu
 
-					switch (messageType) {
-						case ANNOUNCE:
-							log("ANNOUNCE received");
-							if (isAnnouncing) {
-								log("2nd time I received this message");
-								// On recoit pour la deuxième fois l'annonce, on doit chercher l'élu
-								elected = getBestSite(data);
+									for (int i = 0; i < hosts.length; i++) {
+										hosts[i].setApptitude(announceMessage.getApptitude(i));
+									}
 
-								// Si on est l'élu, on doit envoyer le résultat
-								if (elected == localSite) {
-									log("I am the one, sending results");
-									sendResult(neighbor);
-								} else { // On doit retransmettre le message
-									log("We are not the one, retransmitting message");
-									packet.setSocketAddress(neighbor.socketAddress);
-									socket.send(packet);
+									// On utilise la comparaison native des sites
+									elected = Arrays.stream(hosts)
+										.sorted()
+										.findFirst()
+										.get();
+
+									// Si on est l'élu, on doit envoyer le résultat
+									if (elected == localSite) {
+										log("I am the one, sending results");
+
+										ResultsMessage result = new ResultsMessage(getSiteIndex(elected));
+										sendQuittancedMessageToNext(result);
+
+										locker.notifyAll();
+									} else { // On doit retransmettre le message
+										log("We are not the one, retransmitting message");
+										sendQuittancedMessageToNext(message);
+									}
+								} else { // On recoit pour la première fois le message
+									log("Updating apptitude and transmitting further");
+									// On met à jour la liste
+									announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+
+									// On le retransmet
+									sendQuittancedMessageToNext(announceMessage);
+
+									isAnnouncing = true;
 								}
-							} else { // On recoit pour la première fois le message
-								log("Updating apptitude and transmitting further");
-								// On met à jour la liste
-								addAptitudeToMessage(data);
+								break;
+							case RESULTS:
+								log("RESULTS received");
+								ResultsMessage resultsMessage = (ResultsMessage)message;
+								elected = hosts[resultsMessage.getElectedIndex()];
+								isAnnouncing = false;
 
-								// On le retransmet
-								packet.setData(data);
-								socket.send(packet);
-
-								isAnnouncing = true;
-							}
-							break;
-						case RESULTS:
-							log("RESULTS received");
-							elected = hosts[data[1]];
-							isAnnouncing = false;
-
-							// On arrête le message quand on est l'élu (qu'on a donc
-							// envoyé le message result en premier) et qu'on le reçoit
-							// Sinon, on le retransmet
-							if (elected != localSite) {
-								log("I am not the one, retransmitting");
-								socket.send(packet);
-							}else{
-								log("I am the one, stopping message propagation");
-							}
-							break;
+								// On arrête le message quand on est l'élu (qu'on a donc
+								// envoyé le message result en premier) et qu'on le reçoit
+								// Sinon, on le retransmet
+								if (elected != localSite) {
+									log("I am not the one, retransmitting");
+									sendQuittancedMessageToNext(resultsMessage);
+									locker.notifyAll();
+								} else {
+									log("I am the one, stopping message propagation");
+								}
+								break;
+							case ECHO:
+								log("ECHO RECEIVED");
+								// On ne fait rien, la quittance a déjà été envoyée
+								break;
+						}
 					}
 
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
+
 			}
 		});
 
 		// Launching the listening thread
 		electionListener.start();
 
+		// Starting the election
+		this.startElection();
 	}
 
-	public ElectionManager(String[][] hosts, byte hostIndex) throws SocketException {
+	public ElectionManager(String[][] hosts, byte hostIndex) throws SocketException, IOException {
 		this(Arrays.stream(hosts)
 			.map((s) -> new Site(s[0], Integer.parseInt(s[1])))
 			.toArray(Site[]::new), hostIndex);
@@ -159,7 +189,8 @@ public class ElectionManager implements Closeable {
 
 	private boolean isAnnouncing = false;
 
-	private void sendResult(Site to) throws IOException {
+	/*
+	private synchronized void sendResult(Site to) throws IOException {
 		byte[] data = new byte[2];
 
 		data[0] = MessageType.RESULTS.getByte();
@@ -168,30 +199,7 @@ public class ElectionManager implements Closeable {
 		DatagramPacket packet = new DatagramPacket(data, data.length, to.socketAddress);
 		socket.send(packet);
 		log("Results sent");
-	}
-
-	private static enum MessageType {
-		/**
-		 * Un message de type annonce est formé de d'abord le type de message,
-		 * puis des aptitudes (int) de chacun :
-		 * |TYPE|APT1|APT1|APT1|APT1|APT2|APT2|APT2|APT2|...
-		 */
-		ANNOUNCE,
-		/**
-		 * Un message de type results est formé de d'abord le type de message,
-		 * puis de l'index de l'hôte élu (byte) : |TYPE|INDEX|...
-		 */
-		RESULTS;
-
-		public byte getByte() {
-			return (byte) this.ordinal();
-		}
-
-		public static MessageType getMessageType(byte b) {
-			return MessageType.values()[b];
-		}
-	}
-
+	}//*/
 	private byte getSiteIndex(Site site) {
 		for (int i = 0; i < hosts.length; i++) {
 			if (hosts[i] == site) {
@@ -205,10 +213,11 @@ public class ElectionManager implements Closeable {
 
 	private Thread electionListener;
 
-	private int evaluateAptitude() {
+	private int computeLocalApptitude() {
 		return socket.getLocalAddress().getAddress()[3] + socket.getLocalPort();
 	}
 
+	/*
 	private Site getBestSite(byte[] data) {
 		log("Calculating who is the best Site");
 		int bestApptitude = 0;
@@ -247,28 +256,41 @@ public class ElectionManager implements Closeable {
 		}
 
 		return bestSite;
-	}
-
+	}//*/
 	public void startElection() throws IOException {
-		log("Starting an election");
-		//-- Preparing the message 
-		byte[] message = new byte[getAnnounceSize()];
+		synchronized (locker) {
+			if (isAnnouncing) {
+				log("Starting an election, but an election is already running");
+				return;
+			}
 
-		message[0] = MessageType.ANNOUNCE.getByte();
-		addAptitudeToMessage(message);
+			//Thread t = new Thread(() -> {
+			try {
+				log("Starting an election");
+				// Setting basic values
+				isAnnouncing = true;
 
-		// Sending it
-		DatagramPacket packet = new DatagramPacket(message, message.length, neighbor.socketAddress);
-		socket.send(packet);
+				// Getting the neighbor
+				neighbor = hosts[(getSiteIndex(localSite) + 1) % hosts.length];
 
-		isAnnouncing = true;
-		
-		log("Announced message sent");
+				//-- Preparing the message
+				AnnounceMessage announceMessage = new AnnounceMessage(hosts.length);
+				announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+
+				sendQuittancedMessageToNext(announceMessage);
+			} catch (IOException ex) {
+				Logger.getLogger(ElectionManager.class.getName()).log(Level.SEVERE, null, ex);
+			}
+
+			//});
+			//t.start();
+			log("Announced message sent");
+		}
 	}
 
 	private void addAptitudeToMessage(byte[] message) {
 		// Setting aptitude
-		byte[] aptitude = ByteIntConverter.intToByte(evaluateAptitude());
+		byte[] aptitude = ByteIntConverter.intToByte(computeLocalApptitude());
 		for (int i = 0; i < aptitude.length; i++) {
 			message[1 + localHostIndex * (aptitude.length)] = aptitude[i];
 		}
@@ -283,13 +305,82 @@ public class ElectionManager implements Closeable {
 		log("Everything's closed");
 	}
 
-	public static class Site {
+	public Site getElected() throws InterruptedException {
+		log("Someone want to get the chosen one");
+		// Waiting if there is currently an election to get the new site
+		synchronized (locker) {
+			if (isAnnouncing) {
+				log("Waiting for the elected site");
+				locker.wait();
+				log("Locker released to get the elected site");
+			}
+		}
 
-		private InetSocketAddress socketAddress;
+		return elected;
+	}
 
-		public Site(String ip, int port) {
-			socketAddress = new InetSocketAddress(ip, port);
+	private synchronized void sendQuittancedMessageToNext(Message message) throws IOException {
+		boolean unreachable = false;
+		do {
+			try {
+				sendQuittancedMessage(message, neighbor);
+			} catch (UnreachableRemoteException ex) {
+				unreachable = true;
+			}
+		} while (unreachable);
+
+	}
+
+	private synchronized void sendMessage(Message message, SocketAddress socketAddress) throws IOException {
+		DatagramPacket packet = new DatagramPacket(message.toByteArray(), message.toByteArray().length, socketAddress);
+		socket.send(packet);
+	}
+
+	private synchronized void sendMessage(Message message, Site site) throws IOException {
+		sendMessage(message, site.getSocketAddress());
+	}
+
+	private synchronized void sendQuittancedMessage(Message message, Site site) throws IOException, UnreachableRemoteException {
+		sendMessage(message, site);
+
+		try {
+			Message m = receiveTimeoutMessage();
+			if (m.getMessageType() == Message.MessageType.QUITTANCE) {
+				return;
+			} else {
+				throw new UnreachableRemoteException();
+			}
+		} catch (SocketTimeoutException e) {
+			// Si on atteint pas le site
+			throw new UnreachableRemoteException(e);
 		}
 
 	}
+
+	private synchronized Message receiveMessage() throws IOException {
+		int maxSize = Message.getMaxMessageSize(hosts.length);
+		DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
+		socket.receive(packet);
+
+		return Message.parse(packet.getData());
+	}
+
+	private synchronized Message receiveTimeoutMessage() throws IOException, SocketTimeoutException {
+		socket.setSoTimeout(QUITTANCE_TIMEOUT);
+		Message m = receiveMessage();
+		socket.setSoTimeout(0);
+		return m;
+	}
+
+	private static class UnreachableRemoteException extends Exception {
+
+		public UnreachableRemoteException() {
+			super();
+		}
+
+		public UnreachableRemoteException(Exception e) {
+			super(e);
+		}
+	}
+
 }

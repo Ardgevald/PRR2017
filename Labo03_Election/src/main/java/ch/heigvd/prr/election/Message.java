@@ -13,6 +13,10 @@ import util.ByteIntConverter;
  */
 public abstract class Message {
 
+	public static int getMaxMessageSize(int numberOfHost) {
+		return numberOfHost * Integer.BYTES + 1;
+	}
+
 	public static enum MessageType {
 		/**
 		 * Un message de type annonce est formé de d'abord le type de message,
@@ -64,15 +68,59 @@ public abstract class Message {
 		return bytes;
 	}
 
+	public static Message parse(byte[] data) {
+		MessageType type = MessageType.getMessageType(data[0]);
+
+		switch (type) {
+			case ANNOUNCE:
+				return new AnnounceMessage(data);
+			case ECHO:
+				return new EchoMessage();
+			case QUITTANCE:
+				return new QuittanceMessage();
+			case RESULTS:
+				return new ResultsMessage(data);
+			default:
+				return null;
+		}
+	}
+
 	// ------------------
 	public static class AnnounceMessage extends Message {
 
-		private List<Site> sites;
+		private int[] apptitudes;
 
-		public AnnounceMessage(List<Site> sites) {
-			this.sites = sites;
+		public AnnounceMessage(int[] apptitudes) {
+			this.apptitudes = apptitudes;
 		}
 
+		public AnnounceMessage(int numberOfHost) {
+			apptitudes = new int[numberOfHost];
+		}
+
+		public AnnounceMessage(byte[] data) {
+			this((data.length - 1) / Integer.BYTES);
+			
+			for (int i = 0; i < apptitudes.length; i++) { // Pour chaque site
+				byte[] aptBytes = new byte[Integer.BYTES];
+				for (int j = 0; j < aptBytes.length; j++) {
+					aptBytes[j] = data[1 + i * (aptBytes.length)];
+				}
+
+				int curApptitude = ByteIntConverter.bytesToInt(aptBytes);
+				apptitudes[i] = curApptitude;
+			}
+		}
+
+		public void setApptitude(int hostIndex, int apptitude){
+			this.apptitudes[hostIndex] = apptitude;
+		}
+		
+		public int getApptitude(int hostIndex){
+			return this.apptitudes[hostIndex];
+		}
+		
+		/*
 		public AnnounceMessage(List<Site> sites, byte[] data) {
 			this(sites);
 
@@ -90,8 +138,7 @@ public abstract class Message {
 				int curApptitude = ByteIntConverter.bytesToInt(aptBytes);
 				curSite.setApptitude(curApptitude);
 			}
-		}
-
+		}//*/
 		@Override
 		protected MessageType getMessageType() {
 			return MessageType.ANNOUNCE;
@@ -101,9 +148,9 @@ public abstract class Message {
 		public List<Byte> toByteList() {
 			List<Byte> bytes = super.toByteList();
 
-			for (Site site : sites) {
-				byte[] apptitude = ByteIntConverter.intToByte(site.getApptitude());
-				for (byte b : apptitude) {
+			for (Integer apptitude : apptitudes) {
+				byte[] app = ByteIntConverter.intToByte(apptitude);
+				for (byte b : app) {
 					bytes.add(b);
 				}
 			}
@@ -143,14 +190,16 @@ public abstract class Message {
 
 	}
 
-	public static class QuittanceMessage extends Message{
+	public static class QuittanceMessage extends Message {
+
 		@Override
 		protected MessageType getMessageType() {
 			return MessageType.QUITTANCE;
 		}
 	}
-	
-	public static class EchoMessage extends Message{
+
+	public static class EchoMessage extends Message {
+
 		@Override
 		protected MessageType getMessageType() {
 			return MessageType.ECHO;
