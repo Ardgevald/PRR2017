@@ -8,9 +8,6 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -30,7 +27,6 @@ public class ElectionManager implements Closeable {
 
 	private static final int QUITTANCE_TIMEOUT = 1000;
 
-	private LinkedList<Site> ring;
 	private Site[] hosts;
 	private final Site localSite;
 
@@ -39,9 +35,15 @@ public class ElectionManager implements Closeable {
 	private Site neighbor;
 	private Site elected = null;
 
-	private DatagramSocket socket;
+	private DatagramSocket serverSocket;
+	private DatagramSocket timedoutSocket;
 
 	private Object locker = new Object();
+
+	private enum Phase {
+		ANNOUNCE, RESULT
+	};
+	private Phase currentPhase = null;
 
 	private void log(String s) {
 		System.out.println(String.format("%s (%s:%d): %s",
@@ -67,32 +69,33 @@ public class ElectionManager implements Closeable {
 
 		log("Creating DatagramSocket");
 		// Creating the main socket
-		socket = new DatagramSocket(localSite.getSocketAddress());
+		serverSocket = new DatagramSocket(localSite.getSocketAddress());
+		timedoutSocket = new DatagramSocket();
+		timedoutSocket.setSoTimeout(QUITTANCE_TIMEOUT);
 
 		this.electionListener = new Thread(() -> {
 			while (true) {
 				try {
-					DatagramPacket packet = new DatagramPacket(new byte[getAnnounceSize()], getAnnounceSize());
-
 					// We are waiting for an income packet
 					log("Waiting for entering packet");
 
-					Message message = receiveMessage();
+					Message message = receiveAndQuittanceMessage();
 					MessageType messageType = message.getMessageType();
 
-					// On transmet la quittance
-					QuittanceMessage quittanceMessage = new QuittanceMessage();
-					sendMessage(quittanceMessage, packet.getSocketAddress());
-					
 					// On gère le message reçu
 					synchronized (locker) {
 						switch (messageType) {
 							case ANNOUNCE:
 								log("ANNOUNCE received");
 								AnnounceMessage announceMessage = (AnnounceMessage) message;
-								if (isAnnouncing) {
-									log("2nd time I received this message");
+
+								// On vérifie l'annonce
+								if (announceMessage.getApptitude(localHostIndex) != 0) {
+									// Ici, on a déjà écrit notre aptitude dans ce message
 									// On recoit pour la deuxième fois l'annonce, on doit chercher l'élu
+									log("2nd time I received this message");
+
+									currentPhase = Phase.RESULT;
 
 									for (int i = 0; i < hosts.length; i++) {
 										hosts[i].setApptitude(announceMessage.getApptitude(i));
@@ -104,35 +107,48 @@ public class ElectionManager implements Closeable {
 										.findFirst()
 										.get();
 
-									// Si on est l'élu, on doit envoyer le résultat
-									if (elected == localSite) {
-										log("I am the one, sending results");
+									// On envoie les résultats
+									ResultsMessage result = new ResultsMessage(getSiteIndex(elected));
+									result.addSeenSite(localHostIndex);
+									sendQuittancedMessageToNext(result);
 
-										ResultsMessage result = new ResultsMessage(getSiteIndex(elected));
-										sendQuittancedMessageToNext(result);
+									locker.notifyAll();
 
-										locker.notifyAll();
-									} else { // On doit retransmettre le message
-										log("We are not the one, retransmitting message");
-										sendQuittancedMessageToNext(message);
-									}
 								} else { // On recoit pour la première fois le message
 									log("Updating apptitude and transmitting further");
+									currentPhase = Phase.ANNOUNCE;
 									// On met à jour la liste
 									announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
 
 									// On le retransmet
 									sendQuittancedMessageToNext(announceMessage);
 
-									isAnnouncing = true;
 								}
 								break;
 							case RESULTS:
 								log("RESULTS received");
-								ResultsMessage resultsMessage = (ResultsMessage)message;
-								elected = hosts[resultsMessage.getElectedIndex()];
-								isAnnouncing = false;
+								ResultsMessage resultsMessage = (ResultsMessage) message;
 
+								// Si j'ai déjà vu ce message, alors on arrête la propagation
+								if (resultsMessage.getSeenSites().contains(localHostIndex)) {
+									// TODO c'est la fin
+								} else if (currentPhase == Phase.RESULT && getSiteIndex(elected) != resultsMessage.getElectedIndex()) {
+									// Ici, c'est un résultat qu'on a pas vu et qui n'était pas attendu
+									// On recrée une nouvelle annonce vide mis à part notre apptitude
+									AnnounceMessage announce = new AnnounceMessage(hosts.length);
+									announce.setApptitude(localHostIndex, computeLocalApptitude());
+
+									sendQuittancedMessageToNext(announce);
+								} else if (currentPhase == Phase.ANNOUNCE) {
+									// On peut traiter normalement le résultat ici
+									elected = hosts[resultsMessage.getElectedIndex()];
+									
+									// On s'ajoute à la liste des gens qui ont vu se message
+									resultsMessage.addSeenSite(localHostIndex);
+									sendQuittancedMessageToNext(resultsMessage);
+								}
+
+								/*
 								// On arrête le message quand on est l'élu (qu'on a donc
 								// envoyé le message result en premier) et qu'on le reçoit
 								// Sinon, on le retransmet
@@ -142,7 +158,7 @@ public class ElectionManager implements Closeable {
 									locker.notifyAll();
 								} else {
 									log("I am the one, stopping message propagation");
-								}
+								}//*/
 								break;
 							case ECHO:
 								log("ECHO RECEIVED");
@@ -187,7 +203,7 @@ public class ElectionManager implements Closeable {
 		return 1 + Integer.BYTES * hosts.length;
 	}
 
-	private boolean isAnnouncing = false;
+	//private boolean isAnnouncing = false;
 
 	/*
 	private synchronized void sendResult(Site to) throws IOException {
@@ -214,7 +230,7 @@ public class ElectionManager implements Closeable {
 	private Thread electionListener;
 
 	private int computeLocalApptitude() {
-		return socket.getLocalAddress().getAddress()[3] + socket.getLocalPort();
+		return serverSocket.getLocalAddress().getAddress()[3] + serverSocket.getLocalPort();
 	}
 
 	/*
@@ -259,7 +275,7 @@ public class ElectionManager implements Closeable {
 	}//*/
 	public void startElection() throws IOException {
 		synchronized (locker) {
-			if (isAnnouncing) {
+			if (currentPhase != null) {
 				log("Starting an election, but an election is already running");
 				return;
 			}
@@ -268,7 +284,9 @@ public class ElectionManager implements Closeable {
 			try {
 				log("Starting an election");
 				// Setting basic values
-				isAnnouncing = true;
+				//isAnnouncing = true;
+
+				currentPhase = Phase.ANNOUNCE;
 
 				// Getting the neighbor
 				neighbor = hosts[(getSiteIndex(localSite) + 1) % hosts.length];
@@ -299,7 +317,7 @@ public class ElectionManager implements Closeable {
 	@Override
 	public void close() throws IOException {
 		log("Closing connection");
-		socket.close();
+		serverSocket.close();
 		// TODO arrêter la boucle
 
 		log("Everything's closed");
@@ -309,7 +327,7 @@ public class ElectionManager implements Closeable {
 		log("Someone want to get the chosen one");
 		// Waiting if there is currently an election to get the new site
 		synchronized (locker) {
-			if (isAnnouncing) {
+			if (currentPhase != null) {
 				log("Waiting for the elected site");
 				locker.wait();
 				log("Locker released to get the elected site");
@@ -319,28 +337,32 @@ public class ElectionManager implements Closeable {
 		return elected;
 	}
 
-	private synchronized void sendQuittancedMessageToNext(Message message) throws IOException {
-		boolean unreachable = false;
+	private void sendQuittancedMessageToNext(Message message) throws IOException {
+		log("Sending message " + message.getMessageType());
+		boolean unreachable;
 		do {
+			unreachable = false;
 			try {
 				sendQuittancedMessage(message, neighbor);
 			} catch (UnreachableRemoteException ex) {
+				log("Neigbor unreachable, trying next");
 				unreachable = true;
+				neighbor = hosts[(1 + getSiteIndex(neighbor)) % hosts.length];
 			}
 		} while (unreachable);
 
 	}
 
-	private synchronized void sendMessage(Message message, SocketAddress socketAddress) throws IOException {
+	private void sendMessage(Message message, SocketAddress socketAddress) throws IOException {
 		DatagramPacket packet = new DatagramPacket(message.toByteArray(), message.toByteArray().length, socketAddress);
-		socket.send(packet);
+		timedoutSocket.send(packet);
 	}
 
-	private synchronized void sendMessage(Message message, Site site) throws IOException {
+	private void sendMessage(Message message, Site site) throws IOException {
 		sendMessage(message, site.getSocketAddress());
 	}
 
-	private synchronized void sendQuittancedMessage(Message message, Site site) throws IOException, UnreachableRemoteException {
+	private void sendQuittancedMessage(Message message, Site site) throws IOException, UnreachableRemoteException {
 		sendMessage(message, site);
 
 		try {
@@ -357,19 +379,32 @@ public class ElectionManager implements Closeable {
 
 	}
 
-	private synchronized Message receiveMessage() throws IOException {
+	private Message receiveAndQuittanceMessage() throws IOException {
 		int maxSize = Message.getMaxMessageSize(hosts.length);
 		DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
-		socket.receive(packet);
+		serverSocket.receive(packet);
+
+		// On transmet la quittance
+		QuittanceMessage quittanceMessage = new QuittanceMessage();
+		sendMessage(quittanceMessage, packet.getSocketAddress());
 
 		return Message.parse(packet.getData());
 	}
 
-	private synchronized Message receiveTimeoutMessage() throws IOException, SocketTimeoutException {
-		socket.setSoTimeout(QUITTANCE_TIMEOUT);
-		Message m = receiveMessage();
-		socket.setSoTimeout(0);
-		return m;
+	private Message receiveMessage() throws IOException {
+		int maxSize = Message.getMaxMessageSize(hosts.length);
+		DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
+		serverSocket.receive(packet);
+
+		return Message.parse(packet.getData());
+	}
+
+	private Message receiveTimeoutMessage() throws IOException, SocketTimeoutException {
+		int maxSize = Message.getMaxMessageSize(hosts.length);
+		DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
+		timedoutSocket.receive(packet);
+
+		return Message.parse(packet.getData());
 	}
 
 	private static class UnreachableRemoteException extends Exception {

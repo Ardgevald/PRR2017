@@ -26,7 +26,7 @@ public abstract class Message {
 		ANNOUNCE,
 		/**
 		 * Un message de type results est formé de d'abord le type de message,
-		 * puis de l'index de l'hôte élu (byte) : |TYPE|INDEX|...
+		 * puis de l'index de l'hôte élu (byte), puis des sites participant
 		 */
 		RESULTS,
 		/**
@@ -163,13 +163,24 @@ public abstract class Message {
 	public static class ResultsMessage extends Message {
 
 		private byte electedIndex;
+		private LinkedList<Byte> seenSites;
 
 		public ResultsMessage(byte electedIndex) {
 			this.electedIndex = electedIndex;
+			this.seenSites = seenSites;
 		}
 
 		public ResultsMessage(byte[] data) {
 			this.electedIndex = data[1];
+			this.seenSites = new LinkedList<>();
+			
+			for(int i = 1; i < data.length; i++){
+				seenSites.add(data[i]);
+			}
+		}
+		
+		public void addSeenSite(byte hostIndex){
+			this.seenSites.add(hostIndex);
 		}
 
 		@Override
@@ -188,6 +199,11 @@ public abstract class Message {
 			return electedIndex;
 		}
 
+		public LinkedList<Byte> getSeenSites() {
+			return seenSites;
+		}
+
+		
 	}
 
 	public static class QuittanceMessage extends Message {
