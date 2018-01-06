@@ -1,13 +1,16 @@
 package ch.heigvd.prr.election;
 
+import ch.heigvd.prr.election.Message.EchoMessage;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -17,29 +20,59 @@ import java.util.logging.Logger;
  */
 public class App {
 
+	private static final int ECHO_TIMEOUT = 2000;
+	private static final int TIMER_MAX = 10000;
+
 	private ElectionManager electionManager;
 
 	private DatagramSocket socket = new DatagramSocket();
 
+	private Thread sendEchosThread;
+
 	public App(byte hostIndex) throws IOException {
+		socket.setSoTimeout(ECHO_TIMEOUT);
 		log("Creating electionManager");
 		electionManager = new ElectionManager(hostIndex);
 		log("ElectionManager created");
+
+		Random random = new Random();
+		// De temps en temps, on lance un echo
+		sendEchosThread = new Thread(() -> {
+			while (true) {
+				try {
+					synchronized (this) {
+						this.wait(random.nextInt(TIMER_MAX));
+					}
+					sendEcho();
+				} catch (InterruptedException ex) {
+					Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
+				}
+			}
+		});
+		sendEchosThread.start();
+
 	}
 
 	public void sendEcho() {
 		try {
-			DatagramPacket packet = new DatagramPacket(new byte[1], 1, electionManager.getElected().getSocketAddress());
+			EchoMessage message = new EchoMessage();
+			byte[] data = message.toByteArray();
+			DatagramPacket packet = new DatagramPacket(data, data.length, electionManager.getElected().getSocketAddress());
 
-			log("Sending echo");
+			log("Sending echo to " + electionManager.getElected().getSocketAddress().getPort());
 			socket.send(packet);
-			socket.receive(packet);
-			log("Echo succesfuly received");
+			try {
+				socket.receive(packet);
+				log("Echo succesfuly received");
+			} catch (SocketTimeoutException e) {
+				// Si on atteint pas le site
+				log("Site actially down, starting another election");
+				electionManager.startElection();
+			}
+
 		} catch (SocketException ex) {
 			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-		} catch (IOException ex) {
-			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-		} catch (InterruptedException ex) {
+		} catch (IOException | InterruptedException ex) {
 			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
 		}
 	}
@@ -51,17 +84,14 @@ public class App {
 			socket.getPort(),
 			s));
 	}
-	
+
 	public static void main(String... args) throws IOException {
-		// UTiliser les tryWithRessource ici
-		// TODO : Election automatique au démarrage
-		
-		App[] apps = {
-			new App((byte)0), new App((byte)1)
-		};
-		
-		apps[0].sendEcho();
-		
+		// TODO UTiliser les tryWithRessource ici
+
+		App[] apps = new App[4];
+		for (int i = 0; i < apps.length; i++) {
+			apps[i] = new App((byte) i);
+		}
 
 	}
 }

@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import util.ByteIntConverter;
@@ -46,9 +47,8 @@ public class ElectionManager implements Closeable {
 	private Phase currentPhase = null;
 
 	private void log(String s) {
-		System.out.println(String.format("%s (%s:%d): %s",
+		System.out.println(String.format("%s (%d): %s",
 			"ElectionManager",
-			localSite.getSocketAddress().getAddress().getHostAddress(),
 			localSite.getSocketAddress().getPort(),
 			s));
 	}
@@ -77,78 +77,95 @@ public class ElectionManager implements Closeable {
 			while (true) {
 				try {
 					// We are waiting for an income packet
-					log("Waiting for entering packet");
+					log("Waiting for incomming packet");
 
 					Message message = receiveAndQuittanceMessage();
 					MessageType messageType = message.getMessageType();
 
 					// On gère le message reçu
-					synchronized (locker) {
-						switch (messageType) {
-							case ANNOUNCE:
-								log("ANNOUNCE received");
-								AnnounceMessage announceMessage = (AnnounceMessage) message;
+					switch (messageType) {
+						case ANNOUNCE:
+							log("ANNOUNCE received");
+							AnnounceMessage announceMessage = (AnnounceMessage) message;
 
-								// On vérifie l'annonce
-								if (announceMessage.getApptitude(localHostIndex) != 0) {
-									// Ici, on a déjà écrit notre aptitude dans ce message
-									// On recoit pour la deuxième fois l'annonce, on doit chercher l'élu
-									log("2nd time I received this message");
+							// On vérifie l'annonce
+							if (announceMessage.getApptitude(localHostIndex) != null) {
+								// Ici, on a déjà écrit notre aptitude dans ce message
+								// On recoit pour la deuxième fois l'annonce, on doit chercher l'élu
+								log("2nd time I received this message");
 
-									currentPhase = Phase.RESULT;
+								currentPhase = Phase.RESULT;
 
-									for (int i = 0; i < hosts.length; i++) {
-										hosts[i].setApptitude(announceMessage.getApptitude(i));
+								for (Map.Entry<Byte, Integer> entry : announceMessage.getApptitudes().entrySet()) {
+									Byte index = entry.getKey();
+									Integer apptitude = entry.getValue();
+
+									hosts[index].setApptitude(apptitude);
+								}
+
+								// On utilise la comparaison native des sites
+								elected = Arrays.stream(hosts)
+									.sorted()
+									.findFirst()
+									.get();
+
+								// On envoie les résultats
+								// Dans un nouveau thread afin de se débloquer d'ici
+								// dans le cas où on s'envoit à soit même le résultat
+								ResultsMessage result = new ResultsMessage(getSiteIndex(elected));
+								result.addSeenSite(localHostIndex);
+
+								new Thread(() -> {
+									try {
+										sendQuittancedMessageToNext(result);
+									} catch (IOException ex) {
+										Logger.getLogger(ElectionManager.class.getName()).log(Level.SEVERE, null, ex);
 									}
+								}).start();
 
-									// On utilise la comparaison native des sites
-									elected = Arrays.stream(hosts)
-										.sorted()
-										.findFirst()
-										.get();
-
-									// On envoie les résultats
-									ResultsMessage result = new ResultsMessage(getSiteIndex(elected));
-									result.addSeenSite(localHostIndex);
-									sendQuittancedMessageToNext(result);
-
+								synchronized (locker) {
 									locker.notifyAll();
-
-								} else { // On recoit pour la première fois le message
-									log("Updating apptitude and transmitting further");
-									currentPhase = Phase.ANNOUNCE;
-									// On met à jour la liste
-									announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
-
-									// On le retransmet
-									sendQuittancedMessageToNext(announceMessage);
-
-								}
-								break;
-							case RESULTS:
-								log("RESULTS received");
-								ResultsMessage resultsMessage = (ResultsMessage) message;
-
-								// Si j'ai déjà vu ce message, alors on arrête la propagation
-								if (resultsMessage.getSeenSites().contains(localHostIndex)) {
-									// TODO c'est la fin
-								} else if (currentPhase == Phase.RESULT && getSiteIndex(elected) != resultsMessage.getElectedIndex()) {
-									// Ici, c'est un résultat qu'on a pas vu et qui n'était pas attendu
-									// On recrée une nouvelle annonce vide mis à part notre apptitude
-									AnnounceMessage announce = new AnnounceMessage(hosts.length);
-									announce.setApptitude(localHostIndex, computeLocalApptitude());
-
-									sendQuittancedMessageToNext(announce);
-								} else if (currentPhase == Phase.ANNOUNCE) {
-									// On peut traiter normalement le résultat ici
-									elected = hosts[resultsMessage.getElectedIndex()];
-									
-									// On s'ajoute à la liste des gens qui ont vu se message
-									resultsMessage.addSeenSite(localHostIndex);
-									sendQuittancedMessageToNext(resultsMessage);
 								}
 
-								/*
+							} else { // On recoit pour la première fois le message
+								log("Updating apptitude and transmitting further");
+								currentPhase = Phase.ANNOUNCE;
+								// On met à jour la liste
+								announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+
+								// On le retransmet
+								sendQuittancedMessageToNext(announceMessage);
+
+							}
+							break;
+						case RESULTS:
+							log("RESULTS received");
+							ResultsMessage resultsMessage = (ResultsMessage) message;
+
+							// Si j'ai déjà vu ce message, alors on arrête la propagation
+							if (resultsMessage.getSeenSites().contains(localHostIndex)) {
+								// On ne fait qu'arrêter la propagation, rien d'autre
+							} else if (currentPhase == Phase.RESULT && getSiteIndex(elected) != resultsMessage.getElectedIndex()) {
+								// Ici, c'est un résultat qu'on a pas vu et qui n'était pas attendu
+								// On recrée une nouvelle annonce vide mis à part notre apptitude
+								AnnounceMessage announce = new AnnounceMessage();
+								announce.setApptitude(localHostIndex, computeLocalApptitude());
+
+								sendQuittancedMessageToNext(announce);
+							} else if (currentPhase == Phase.ANNOUNCE) {
+								// On peut traiter normalement le résultat ici
+								elected = hosts[resultsMessage.getElectedIndex()];
+
+								synchronized (locker) {
+									locker.notifyAll();
+								}
+								
+								// On s'ajoute à la liste des gens qui ont vu se message
+								resultsMessage.addSeenSite(localHostIndex);
+								sendQuittancedMessageToNext(resultsMessage);
+							}
+
+							/*
 								// On arrête le message quand on est l'élu (qu'on a donc
 								// envoyé le message result en premier) et qu'on le reçoit
 								// Sinon, on le retransmet
@@ -159,12 +176,11 @@ public class ElectionManager implements Closeable {
 								} else {
 									log("I am the one, stopping message propagation");
 								}//*/
-								break;
-							case ECHO:
-								log("ECHO RECEIVED");
-								// On ne fait rien, la quittance a déjà été envoyée
-								break;
-						}
+							break;
+						case ECHO:
+							log("ECHO RECEIVED");
+							// On ne fait rien, la quittance a déjà été envoyée
+							break;
 					}
 
 				} catch (IOException e) {
@@ -292,7 +308,7 @@ public class ElectionManager implements Closeable {
 				neighbor = hosts[(getSiteIndex(localSite) + 1) % hosts.length];
 
 				//-- Preparing the message
-				AnnounceMessage announceMessage = new AnnounceMessage(hosts.length);
+				AnnounceMessage announceMessage = new AnnounceMessage();
 				announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
 
 				sendQuittancedMessageToNext(announceMessage);
@@ -326,12 +342,13 @@ public class ElectionManager implements Closeable {
 	public Site getElected() throws InterruptedException {
 		log("Someone want to get the chosen one");
 		// Waiting if there is currently an election to get the new site
-		synchronized (locker) {
-			if (currentPhase != null) {
-				log("Waiting for the elected site");
+
+		if (currentPhase != null && currentPhase != Phase.RESULT) {
+			log("Waiting for the elected site");
+			synchronized (locker) {
 				locker.wait();
-				log("Locker released to get the elected site");
 			}
+			log("Locker released to get the elected site");
 		}
 
 		return elected;
@@ -369,6 +386,7 @@ public class ElectionManager implements Closeable {
 			Message m = receiveTimeoutMessage();
 			if (m.getMessageType() == Message.MessageType.QUITTANCE) {
 				return;
+				// TODO : checker si la quittance vient de la bonne personne
 			} else {
 				throw new UnreachableRemoteException();
 			}

@@ -1,10 +1,13 @@
 package ch.heigvd.prr.election;
 
+import java.security.KeyPair;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import util.ByteIntConverter;
 
@@ -20,8 +23,8 @@ public abstract class Message {
 	public static enum MessageType {
 		/**
 		 * Un message de type annonce est formé de d'abord le type de message,
-		 * puis des aptitudes (int) de chacun :
-		 * |TYPE|APT1|APT1|APT1|APT1|APT2|APT2|APT2|APT2|...
+		 * puis des aptitudes (int) de chacun : |TYPE| |index|apt|apt|apt|apt
+		 * |index2|apt|apt|apt|apt
 		 */
 		ANNOUNCE,
 		/**
@@ -88,38 +91,50 @@ public abstract class Message {
 	// ------------------
 	public static class AnnounceMessage extends Message {
 
-		private int[] apptitudes;
+		private Map<Byte, Integer> apptitudes;
 
-		public AnnounceMessage(int[] apptitudes) {
+		public AnnounceMessage(Map<Byte, Integer> apptitudes) {
 			this.apptitudes = apptitudes;
 		}
 
-		public AnnounceMessage(int numberOfHost) {
-			apptitudes = new int[numberOfHost];
+		public AnnounceMessage() {
+			this.apptitudes = new HashMap<>();
 		}
 
 		public AnnounceMessage(byte[] data) {
-			this((data.length - 1) / Integer.BYTES);
-			
-			for (int i = 0; i < apptitudes.length; i++) { // Pour chaque site
+			this();
+
+			// On cherche le nombre de site
+			int rowSize = 1 + Integer.BYTES;
+			int nbSite = (data.length - 1) / rowSize;
+
+			for (int i = 0; i < nbSite; i++) { // Pour chaque site
+				byte hostIndex = data[1 + i * rowSize];
+
 				byte[] aptBytes = new byte[Integer.BYTES];
 				for (int j = 0; j < aptBytes.length; j++) {
-					aptBytes[j] = data[1 + i * (aptBytes.length)];
+					aptBytes[j] = data[1 + i * rowSize + j];
 				}
 
 				int curApptitude = ByteIntConverter.bytesToInt(aptBytes);
-				apptitudes[i] = curApptitude;
+				apptitudes.put(hostIndex, curApptitude);
 			}
 		}
 
-		public void setApptitude(int hostIndex, int apptitude){
-			this.apptitudes[hostIndex] = apptitude;
+		public void setApptitude(byte hostIndex, int apptitude) {
+			this.apptitudes.put(hostIndex, apptitude);
+		}
+
+		public Integer getApptitude(byte hostIndex) {
+			return this.apptitudes.get(hostIndex);
+		}
+
+		public Map<Byte, Integer> getApptitudes() {
+			return apptitudes;
 		}
 		
-		public int getApptitude(int hostIndex){
-			return this.apptitudes[hostIndex];
-		}
 		
+
 		/*
 		public AnnounceMessage(List<Site> sites, byte[] data) {
 			this(sites);
@@ -148,11 +163,16 @@ public abstract class Message {
 		public List<Byte> toByteList() {
 			List<Byte> bytes = super.toByteList();
 
-			for (Integer apptitude : apptitudes) {
+			for (Map.Entry<Byte, Integer> entry : apptitudes.entrySet()) {
+				Byte hostIndex = entry.getKey();
+				bytes.add(hostIndex);
+
+				Integer apptitude = entry.getValue();
 				byte[] app = ByteIntConverter.intToByte(apptitude);
 				for (byte b : app) {
 					bytes.add(b);
 				}
+
 			}
 
 			return bytes;
@@ -167,19 +187,19 @@ public abstract class Message {
 
 		public ResultsMessage(byte electedIndex) {
 			this.electedIndex = electedIndex;
-			this.seenSites = seenSites;
+			this.seenSites = new LinkedList<>();
 		}
 
 		public ResultsMessage(byte[] data) {
 			this.electedIndex = data[1];
 			this.seenSites = new LinkedList<>();
-			
-			for(int i = 1; i < data.length; i++){
+
+			for (int i = 1; i < data.length; i++) {
 				seenSites.add(data[i]);
 			}
 		}
-		
-		public void addSeenSite(byte hostIndex){
+
+		public void addSeenSite(byte hostIndex) {
 			this.seenSites.add(hostIndex);
 		}
 
@@ -203,7 +223,6 @@ public abstract class Message {
 			return seenSites;
 		}
 
-		
 	}
 
 	public static class QuittanceMessage extends Message {

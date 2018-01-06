@@ -34,7 +34,7 @@ public class Site implements Comparable<Site> {
 
 	@Override
 	public int compareTo(Site t) {
-		int currentComparaison = this.apptitude - t.apptitude;
+		int currentComparaison = t.apptitude - this.apptitude;
 		if (currentComparaison != 0) {
 			return currentComparaison;
 		} else {
