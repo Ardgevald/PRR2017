@@ -406,7 +406,7 @@ public class ElectionManager implements Closeable {
 		QuittanceMessage quittanceMessage = new QuittanceMessage();
 		sendMessage(quittanceMessage, packet.getSocketAddress());
 
-		return Message.parse(packet.getData());
+		return Message.parse(packet.getData(), packet.getLength());
 	}
 
 	private Message receiveMessage() throws IOException {
@@ -414,7 +414,7 @@ public class ElectionManager implements Closeable {
 		DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
 		serverSocket.receive(packet);
 
-		return Message.parse(packet.getData());
+		return Message.parse(packet.getData(), packet.getLength());
 	}
 
 	private Message receiveTimeoutMessage() throws IOException, SocketTimeoutException {
@@ -422,7 +422,7 @@ public class ElectionManager implements Closeable {
 		DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
 		timedoutSocket.receive(packet);
 
-		return Message.parse(packet.getData());
+		return Message.parse(packet.getData(), packet.getLength());
 	}
 
 	private static class UnreachableRemoteException extends Exception {

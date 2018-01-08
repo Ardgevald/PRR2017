@@ -71,18 +71,18 @@ public abstract class Message {
 		return bytes;
 	}
 
-	public static Message parse(byte[] data) {
+	public static Message parse(byte[] data, int size) {
 		MessageType type = MessageType.getMessageType(data[0]);
 
 		switch (type) {
 			case ANNOUNCE:
-				return new AnnounceMessage(data);
+				return new AnnounceMessage(data, size);
 			case ECHO:
 				return new EchoMessage();
 			case QUITTANCE:
 				return new QuittanceMessage();
 			case RESULTS:
-				return new ResultsMessage(data);
+				return new ResultsMessage(data, size);
 			default:
 				return null;
 		}
@@ -101,12 +101,12 @@ public abstract class Message {
 			this.apptitudes = new HashMap<>();
 		}
 
-		public AnnounceMessage(byte[] data) {
+		public AnnounceMessage(byte[] data, int size) {
 			this();
 
 			// On cherche le nombre de site
 			int rowSize = 1 + Integer.BYTES;
-			int nbSite = (data.length - 1) / rowSize;
+			int nbSite = (size - 1) / rowSize;
 
 			for (int i = 0; i < nbSite; i++) { // Pour chaque site
 				byte hostIndex = data[1 + i * rowSize];
@@ -190,11 +190,11 @@ public abstract class Message {
 			this.seenSites = new LinkedList<>();
 		}
 
-		public ResultsMessage(byte[] data) {
+		public ResultsMessage(byte[] data, int size) {
 			this.electedIndex = data[1];
 			this.seenSites = new LinkedList<>();
 
-			for (int i = 1; i < data.length; i++) {
+			for (int i = 1; i < size; i++) {
 				seenSites.add(data[i]);
 			}
 		}
