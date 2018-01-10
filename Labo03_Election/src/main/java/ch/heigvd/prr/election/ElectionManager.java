@@ -27,6 +27,7 @@ import util.ByteIntConverter;
 public class ElectionManager implements Closeable {
 
 	private static final int QUITTANCE_TIMEOUT = 1000;
+	private static final int ELECTION_TIMEOUT = 6000;
 
 	private Site[] hosts;
 	private final Site localSite;
@@ -159,7 +160,7 @@ public class ElectionManager implements Closeable {
 								synchronized (locker) {
 									locker.notifyAll();
 								}
-								
+
 								// On s'ajoute à la liste des gens qui ont vu se message
 								resultsMessage.addSeenSite(localHostIndex);
 								sendQuittancedMessageToNext(resultsMessage);
@@ -296,30 +297,32 @@ public class ElectionManager implements Closeable {
 				return;
 			}
 
-			//Thread t = new Thread(() -> {
-			try {
-				log("Starting an election");
-				// Setting basic values
-				//isAnnouncing = true;
+			startElectionLocal();
 
-				currentPhase = Phase.ANNOUNCE;
-
-				// Getting the neighbor
-				neighbor = hosts[(getSiteIndex(localSite) + 1) % hosts.length];
-
-				//-- Preparing the message
-				AnnounceMessage announceMessage = new AnnounceMessage();
-				announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
-
-				sendQuittancedMessageToNext(announceMessage);
-			} catch (IOException ex) {
-				Logger.getLogger(ElectionManager.class.getName()).log(Level.SEVERE, null, ex);
-			}
-
-			//});
-			//t.start();
-			log("Announced message sent");
 		}
+	}
+
+	private void startElectionLocal() {
+		try {
+			log("Starting an election");
+			// Setting basic values
+			//isAnnouncing = true;
+
+			currentPhase = Phase.ANNOUNCE;
+
+			// Getting the neighbor
+			neighbor = hosts[(getSiteIndex(localSite) + 1) % hosts.length];
+
+			//-- Preparing the message
+			AnnounceMessage announceMessage = new AnnounceMessage();
+			announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+
+			sendQuittancedMessageToNext(announceMessage);
+		} catch (IOException ex) {
+			Logger.getLogger(ElectionManager.class.getName()).log(Level.SEVERE, null, ex);
+		}
+
+		log("Announced message sent");
 	}
 
 	private void addAptitudeToMessage(byte[] message) {
@@ -342,13 +345,17 @@ public class ElectionManager implements Closeable {
 	public Site getElected() throws InterruptedException {
 		log("Someone want to get the chosen one");
 		// Waiting if there is currently an election to get the new site
+		synchronized (locker) {
+			while (currentPhase == Phase.ANNOUNCE) {
+				log("Waiting for the elected site");
 
-		if (currentPhase != null && currentPhase != Phase.RESULT) {
-			log("Waiting for the elected site");
-			synchronized (locker) {
-				locker.wait();
+				locker.wait(ELECTION_TIMEOUT);
+				if (currentPhase == Phase.ANNOUNCE) {
+					startElectionLocal();
+				}
+
+				log("Locker released to get the elected site");
 			}
-			log("Locker released to get the elected site");
 		}
 
 		return elected;
@@ -423,6 +430,7 @@ public class ElectionManager implements Closeable {
 		timedoutSocket.receive(packet);
 
 		return Message.parse(packet.getData(), packet.getLength());
+
 	}
 
 	private static class UnreachableRemoteException extends Exception {
