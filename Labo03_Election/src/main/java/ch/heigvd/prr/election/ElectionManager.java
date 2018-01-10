@@ -98,6 +98,8 @@ public class ElectionManager implements Closeable {
                      log("ANNOUNCE received");
                      AnnounceMessage announceMessage = (AnnounceMessage) message;
 
+                     log("Annonce : " + announceMessage.getApptitudes().toString());
+                     
                      // On vérifie l'annonce
                      if (announceMessage.getApptitude(localHostIndex) != null) {
                         // Ici, on a déjà écrit notre aptitude dans ce message

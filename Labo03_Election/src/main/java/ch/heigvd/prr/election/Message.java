@@ -13,7 +13,7 @@ import util.ByteIntConverter;
 public abstract class Message {
 
 	public static int getMaxMessageSize(int numberOfHost) {
-		return numberOfHost * Integer.BYTES + Byte.BYTES;
+		return numberOfHost * (Integer.BYTES + MessageType.BYTES) + MessageType.BYTES;
 	}
 
 	public static enum MessageType {
@@ -86,7 +86,7 @@ public abstract class Message {
 		}
 	}
 
-	/*************************************************
+	/**
     * 
     */
 	public static class AnnounceMessage extends Message {
