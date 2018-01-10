@@ -156,6 +156,7 @@ public class ElectionManager implements Closeable {
                      if (resultsMessage.getSeenSites().contains(localHostIndex)) {
                         // On ne fait qu'arrêter la propagation, rien d'autre
                         log("############## ELECTIONS ENDED ############");
+                        currentPhase = null;
                      } else if (currentPhase == Phase.RESULT && getSiteIndex(elected) != resultsMessage.getElectedIndex()) {
                         // Ici, c'est un résultat qu'on a pas vu et qui n'était pas attendu
                         // On relance une élection
@@ -163,10 +164,14 @@ public class ElectionManager implements Closeable {
                         startElectionLocal();
 
                      } else if (currentPhase == Phase.ANNOUNCE) {
+                        
+                        currentPhase = null;
+                        
                         // On peut traiter normalement le résultat ici
                         log("Receiving first result, getting elected site and transmitting further");
                         elected = hosts[resultsMessage.getElectedIndex()];
 
+                        
                         synchronized (locker) {
                            locker.notifyAll();
                         }
@@ -174,6 +179,7 @@ public class ElectionManager implements Closeable {
                         // On s'ajoute à la liste des gens qui ont vu ce message
                         resultsMessage.addSeenSite(localHostIndex);
                         sendQuittancedMessageToNext(resultsMessage);
+                        
                      }
 
                      break;
