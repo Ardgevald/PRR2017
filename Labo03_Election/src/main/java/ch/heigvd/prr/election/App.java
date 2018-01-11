@@ -13,96 +13,120 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
+ * Cette classe est l'applicatif de notre programme. Elle permet avant tous
+ * d'envoyer des echos à l'élu, et de vérifier si celui-ci est bien up. S'il est
+ * down, on doit relancer une élection.
  *
- * @author Remi
+ * Remarquons que cet applicatif est un peu "artificiel". En effet, dans un vrai
+ * application, on n'est pas obligé d'interroger le site élu toutes les 'n'
+ * secondes. Il suffit que lorsqu'on a besoin de l'élu, on l'interroge. Si
+ * celui-ci est down, on lance une nouvelle élection.
+ *
+ *
+ *
+ * @author Miguel Pombo Dias
+ * @author Rémi Jacquemard
  */
 public class App {
 
-   private static final int ECHO_TIMEOUT = 2000;
-   private static final int TIMER_MAX = 10000;
+	// Timeout maximal d'un ECHO avant de décider que l'élu est down
+	private static final int ECHO_TIMEOUT = 2000;
 
-   private final ElectionManager electionManager;
+	// Utilisé afin de lancer toutes les TIMER_MAX secondes un echo à l'élu
+	private static final int TIMER_MAX = 10000;
 
-   private final DatagramSocket socket;
+	// L'élection manager associé à cet applicatif
+	private final ElectionManager electionManager;
 
-   private final Thread sendEchosThread;
+	// Le socket utilisé afin d'envoyer les echos
+	private final DatagramSocket socket;
 
-   public App(byte hostIndex) throws IOException {
-      this.socket = new DatagramSocket();
-      socket.setSoTimeout(ECHO_TIMEOUT);
-      log("Creating electionManager");
+	// Le threads lancant les echos toutes les secondes
+	private final Thread sendEchosThread;
 
-      electionManager = new ElectionManager(hostIndex);
-      log("ElectionManager created");
+	/**
+	 * Permet d'instancier une nouvelle application
+	 *
+	 * @param hostIndex l'index du site courant
+	 * @throws IOException si il y a eu une erreur lors de l'echo autre que le
+	 * fait que le site distant a mis trop de temps à répondre
+	 */
+	public App(byte hostIndex) throws IOException {
+		this.socket = new DatagramSocket();
+		socket.setSoTimeout(ECHO_TIMEOUT);
+		log("Creating electionManager");
 
-      // TODO UTiliser les tryWithRessource ici
-      electionManager.startElection();
+		electionManager = new ElectionManager(hostIndex);
+		log("ElectionManager created");
 
-      Random random = new Random();
-      // De temps en temps, on lance un echo
-      sendEchosThread = new Thread(() -> {
-         try {
-            while (true) {
-               synchronized (this) {
-                  this.wait(random.nextInt(TIMER_MAX));
-               }
-               sendEcho();
-            }
-         } catch (InterruptedException ex) {
-            Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-         }
-      });
-   }
+		// On lance une élection
+		electionManager.startElection();
 
-   public void start() {
-      sendEchosThread.start();
-   }
+		Random random = new Random();
+		// De temps en temps, on lance un echo
+		sendEchosThread = new Thread(() -> {
+			try {
+				while (true) {
+					synchronized (this) {
+						this.wait(random.nextInt(TIMER_MAX));
+					}
+					sendEcho();
+				}
+			} catch (InterruptedException ex) {
+				Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
+			}
+		});
+	}
 
-   public void sendEcho() {
-      try {
-         EchoMessage message = new EchoMessage();
-         byte[] data = message.toByteArray();
-         Site elected = electionManager.getElected();
-         DatagramPacket packet = new DatagramPacket(data, data.length, elected.getSocketAddress());
+	public void start() {
+		sendEchosThread.start();
+	}
 
-         log("Sending echo to " + elected.getSocketAddress().getPort());
-         socket.send(packet);
-         try {
-            socket.receive(packet);
-            log("Echo succesfuly received");
-         } catch (SocketTimeoutException e) {
-            // Si on atteint pas le site
-            log("Site actially down, starting another election");
-            electionManager.startElection();
-         }
+	public void sendEcho() {
+		try {
+			EchoMessage message = new EchoMessage();
+			byte[] data = message.toByteArray();
+			Site elected = electionManager.getElected();
+			DatagramPacket packet = new DatagramPacket(data, data.length, elected.getSocketAddress());
 
-      } catch (SocketException ex) {
-         Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-      } catch (IOException | InterruptedException ex) {
-         Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
-      }
-   }
+			log("Sending echo to " + elected.getSocketAddress().getPort());
+			socket.send(packet);
+			try {
+				socket.receive(packet);
+				log("Echo succesfuly received");
+			} catch (SocketTimeoutException e) {
+				// Si on atteint pas le site
+				log("Site actially down, starting another election");
+				electionManager.startElection();
+			}
 
-   private void log(String s) {
-      SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
+		} catch (SocketException ex) {
+			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
+		} catch (IOException | InterruptedException ex) {
+			Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
+		}
+	}
 
-      Date resultdate = new Date(System.currentTimeMillis());
-      String time = sdf.format(resultdate);
-      
-      System.out.println(String.format("%s - %s (%s:%d): %s",
-         time,
-         "App",
-         socket.getLocalAddress().getHostAddress(),
-         socket.getPort(),
-         s));
-   }
+	private void log(String s) {
+		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
 
-   public static void main(String... args) throws IOException {
+		Date resultdate = new Date(System.currentTimeMillis());
+		String time = sdf.format(resultdate);
 
-      if (args.length < 1) {
-         System.err.println("Il manque le numero de site en argument");
-      } else {
-         new App(Byte.valueOf(args[0])).start();
-      }
-   }
+		System.out.println(String.format("%s - %s (%s:%d): %s",
+			time,
+			"App",
+			socket.getLocalAddress().getHostAddress(),
+			socket.getPort(),
+			s));
+	}
+
+	public static void main(String... args) throws IOException {
+
+		if (args.length < 1) {
+			System.err.println("Il manque le numero de site en argument");
+		} else {
+			new App(Byte.valueOf(args[0])).start();
+		}
+	}
 }
