@@ -78,10 +78,16 @@ public class App {
 		});
 	}
 
+	/**
+	 * Permet de lancer l'application
+	 */
 	public void start() {
 		sendEchosThread.start();
 	}
 
+	/**
+	 * Methode permettant d'envoyer des echos à l'élu
+	 */
 	public void sendEcho() {
 		try {
 			EchoMessage message = new EchoMessage();
@@ -107,6 +113,10 @@ public class App {
 		}
 	}
 
+	/**
+	 * Méthode utilise permettant de logger un message
+	 * @param s le message à logger
+	 */
 	private void log(String s) {
 		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
 
@@ -121,6 +131,12 @@ public class App {
 			s));
 	}
 
+	/**
+	 * Un fichier host doit être disponible
+	 * @param args args[0] doit être le numéro de site
+	 * 
+	 * @throws IOException 
+	 */
 	public static void main(String... args) throws IOException {
 
 		if (args.length < 1) {
