@@ -113,7 +113,7 @@ public abstract class Message {
 
 				byte[] aptBytes = new byte[Integer.BYTES];
 				for (int j = 0; j < aptBytes.length; j++) {
-					aptBytes[j] = data[MessageType.BYTES + i * rowSize + j];
+					aptBytes[j] = data[MessageType.BYTES + i * rowSize + 1 + j];
 				}
 
 				int curApptitude = ByteIntConverter.bytesToInt(aptBytes);
@@ -133,27 +133,6 @@ public abstract class Message {
 			return apptitudes;
 		}
 		
-		
-
-	/*
-		public AnnounceMessage(List<Site> sites, byte[] data) {
-			this(sites);
-
-			Iterator<Site> it = sites.iterator();
-
-			for (int i = 0; i < sites.size(); i++) { // Pour chaque site
-				Site curSite = it.next();
-
-				// On récupère l'aptitude
-				byte[] aptBytes = new byte[Integer.BYTES];
-				for (int j = 0; j < aptBytes.length; j++) {
-					aptBytes[j] = data[1 + i * (aptBytes.length)];
-				}
-
-				int curApptitude = ByteIntConverter.bytesToInt(aptBytes);
-				curSite.setApptitude(curApptitude);
-			}
-		}//*/
       
 		@Override
 		protected MessageType getMessageType() {
