@@ -20,8 +20,29 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- *
- * @author Remi
+ * Cette classe permet de gérer une élection pour un site donné
+ * 
+ * Il y a plusieurs cas de figures possibles
+ *    - On construit cette classe en lui donnant les sites existants
+ *    - On ne donne pas les sites, ce qui nécessite d'avoir un fichier
+ *    hosts.txt au même endroit que l'application contenant un hôte
+ *    par ligne, décrit par son addresse et son port
+ * 
+ * Le client doit commencer l'utilisation de la classe en 
+ * appelant la méthode startElection()
+ * 
+ * Ensuite, il peut faire appel à la méthode getElected() qui lui donnera
+ * le site élu dès qu'il est disponible
+ * 
+ * Son comportement est d'attendre un message en permanence pour être
+ * prêt à continuer une élection
+ * 
+ * Il peut en lancer une à tout moment, on évite d'en lancer une si on sait
+ * qu'une autre est déjà en cours, sauf dans le cas où on est lancé pour
+ * la première fois (le nouveau site peut avoir une aptitude plus élevée)
+ * 
+ * @author Rémi Jacquemard
+ * @author Miguel Pombo Dias
  */
 public class ElectionManager implements Closeable {
 
@@ -49,6 +70,12 @@ public class ElectionManager implements Closeable {
 
    private Thread electionListener;
 
+   /**
+    * Classe de log qui permet d'afficher en console des messages datés avec la
+    * classe qui a produit le message
+    *
+    * @param s le message à afficher
+    */
    private void log(String s) {
 
       SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
@@ -57,16 +84,18 @@ public class ElectionManager implements Closeable {
       String time = sdf.format(resultdate);
 
       System.out.println(String.format("%s - %s (%d): %s",
-         time ,
+         time,
          "ElectionManager",
          localSite.getSocketAddress().getPort(),
          s));
    }
 
    /**
-    * Main constructor
+    * Constructeur principal de l'ElectionManager
+    * On met en place tout ce qui est nécessaire à traiter un message d'une élection
+    * On ne commence pas encore le processus ici
     *
-    * @param hosts
+    * @param hosts            Un tableau des sites
     * @param hostIndex
     * @throws SocketException
     */
@@ -75,6 +104,8 @@ public class ElectionManager implements Closeable {
       this.localSite = hosts[hostIndex];
       this.localHostIndex = hostIndex;
 
+      // On calcule un temps de timeout pour l'obtention d'une élection proportionnel
+      // au nombre de sites et au temps de timeout de chacun
       electionTimeout = (int) (ELECTION_TIMEOUT_FACTOR * hosts.length * QUITTANCE_TIMEOUT);
 
       log("Starting Election Manager");
@@ -94,16 +125,20 @@ public class ElectionManager implements Closeable {
 
                // On gère le message reçu
                switch (messageType) {
+                  // Reception d'un message de type Annonce
                   case ANNOUNCE:
                      log("ANNOUNCE received");
                      AnnounceMessage announceMessage = (AnnounceMessage) message;
 
                      log("Annonce : " + announceMessage.getApptitudes().toString());
-                     
+
                      // On vérifie l'annonce
                      if (announceMessage.getApptitude(localHostIndex) != null) {
-                        // Ici, on a déjà écrit notre aptitude dans ce message
-                        // On recoit pour la deuxième fois l'annonce, on doit chercher l'élu
+                        /*
+                           Ici, on a déjà écrit notre aptitude dans ce message, donc
+                           on détermine qui est l'élu et on envoie les résultats
+                           aux sites suivants
+                         */
                         log("2nd time I received this message - Passing to get RESULTS");
 
                         currentPhase = Phase.RESULT;
@@ -121,9 +156,11 @@ public class ElectionManager implements Closeable {
                            .findFirst()
                            .get();
 
-                        // On envoie les résultats
-                        // Dans un nouveau thread afin de se débloquer d'ici
-                        // dans le cas où on s'envoit à soit même le résultat
+                        /*
+                         On envoie les résultats
+                         Dans un nouveau thread afin de se débloquer d'ici
+                         dans le cas où on s'envoit à soit même le résultat
+                         */
                         ResultsMessage result = new ResultsMessage(getSiteIndex(elected));
                         result.addSeenSite(localHostIndex);
 
@@ -139,41 +176,55 @@ public class ElectionManager implements Closeable {
                            locker.notifyAll();
                         }
 
-                     } else { // On recoit pour la première fois le message
+                     } else {
+                        // On recoit pour la première fois le message
+                        // On le met à jour avant de le transmettre au site suivant
                         log("Updating apptitude and transmitting further");
                         currentPhase = Phase.ANNOUNCE;
                         // On met à jour la liste
-                        announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+                        announceMessage.setApptitude(localHostIndex, computeLocalAptitude());
 
                         // On le retransmet
                         sendQuittancedMessageToNext(announceMessage);
 
                      }
                      break;
+                  // Reception d'un message de type Résultat
                   case RESULTS:
+                     
                      log("RESULTS received");
                      ResultsMessage resultsMessage = (ResultsMessage) message;
 
-                     // Si j'ai déjà vu ce message, alors on arrête la propagation
+                     log("Result : " + resultsMessage.getSeenSites().toString());
+
                      if (resultsMessage.getSeenSites().contains(localHostIndex)) {
-                        // On ne fait qu'arrêter la propagation, rien d'autre
+                        /*
+                           Si le résultat est déjà connu, alors on ne fait
+                           qu'arrêter la propagation, rien d'autre
+                        */
                         log("############## ELECTIONS ENDED ############");
                         currentPhase = null;
                      } else if (currentPhase == Phase.RESULT && getSiteIndex(elected) != resultsMessage.getElectedIndex()) {
-                        // Ici, c'est un résultat qu'on a pas vu et qui n'était pas attendu
-                        // On relance une élection
+                        /* 
+                           Ici, c'est un résultat qu'on a pas vu et qui n'était pas
+                           attendu, il y a une incohérence sur celui qui est élu
+                           On relance donc une élection
+                        */
                         log("Incoherent result : starting new election");
                         startElectionLocal();
 
                      } else if (currentPhase == Phase.ANNOUNCE) {
-                        
+                        /*
+                           Dans ce cas, on a vu passer une annonce et on a reçu
+                           un résultat, on en prend note, et on considère que
+                           l'on ne recevra plus de message
+                        */
                         currentPhase = null;
-                        
+
                         // On peut traiter normalement le résultat ici
                         log("Receiving first result, getting elected site and transmitting further");
                         elected = hosts[resultsMessage.getElectedIndex()];
 
-                        
                         synchronized (locker) {
                            locker.notifyAll();
                         }
@@ -181,10 +232,11 @@ public class ElectionManager implements Closeable {
                         // On s'ajoute à la liste des gens qui ont vu ce message
                         resultsMessage.addSeenSite(localHostIndex);
                         sendQuittancedMessageToNext(resultsMessage);
-                        
+
                      }
 
                      break;
+                  // réception d'un message Echo
                   case ECHO:
                      log("ECHO RECEIVED");
                      // On ne fait rien, la quittance a déjà été envoyée
@@ -199,12 +251,26 @@ public class ElectionManager implements Closeable {
       });
    }
 
+   /**
+    * Constructeur avec un tableau de tableaux de strings
+    * On convertit le tableau de tableau en un tableau de sites avant de le transmettre
+    * @param hosts            le tableau des hôtes en String
+    * @param hostIndex        l'indice de l'hôte courant
+    * @throws SocketException
+    * @throws IOException 
+    */
    public ElectionManager(String[][] hosts, byte hostIndex) throws SocketException, IOException {
       this(Arrays.stream(hosts)
          .map((s) -> new Site(s[0], Integer.parseInt(s[1])))
          .toArray(Site[]::new), hostIndex);
    }
 
+   /**
+    * Constructeur sans les hôtes que l'on récupère dans le ficher prévu
+    * à cet effet
+    * @param hostIndex
+    * @throws IOException 
+    */
    public ElectionManager(byte hostIndex) throws IOException {
       // Retreiving the other hosts from the hosts.txt file;
       this(Files.readAllLines(Paths.get("hosts.txt")).stream()
@@ -212,6 +278,11 @@ public class ElectionManager implements Closeable {
          .toArray(String[][]::new), hostIndex);
    }
 
+   /**
+    * Méthode permettant de récupérer l'indice du site à partir d'un site
+    * @param site le site dont on veut obtenir l'identifiant
+    * @return l'identifiant du site
+    */
    private byte getSiteIndex(Site site) {
       for (int i = 0; i < hosts.length; i++) {
          if (hosts[i] == site) {
@@ -219,47 +290,69 @@ public class ElectionManager implements Closeable {
          }
       }
 
-      // Nothing has been found here
+      // Si on ne trouve pas l'incide, on a un souci
       throw new IllegalArgumentException("The site passed in parameters could not be found");
    }
 
-   private int computeLocalApptitude() {
+   /**
+    * calcul de l'aptitude du site en utilisant le port utilisé ainsi qu'une
+    * partie de l'addresse ip.
+    * 
+    * Cette méthode peut-être surchargée par une sous-classe pour avoir un comportement
+    * différent si nécessaire
+    * 
+    * @return un nombre indiquant l'aptitude d'une machine
+    */
+   private int computeLocalAptitude() {
       return serverSocket.getLocalAddress().getAddress()[3] + serverSocket.getLocalPort();
    }
 
+   /**
+    * Cette méthode permet du côté applicatif de lancer une élection
+    * On prépare l'electionListener pour gérer les messages entrants une seule fois
+    * et on évite de lancer une élection si une est déjà en cours
+    * 
+    * La méthode startElectionLocal() est utilisée pour la gestion même de l'élection
+    * 
+    * @throws IOException 
+    */
    public void startElection() throws IOException {
 
+      // Thread de réception des messages
       if (!electionListener.isAlive()) {
          // Launching the listening thread
          electionListener.start();
       }
 
+      // attente en cas d'élection en cours
       synchronized (locker) {
+         // on évite de relancer une élection si déjà en cours
          if (currentPhase != null) {
             log("Starting an election, but an election is already running");
             return;
          }
 
+         // lancement de l'élection à proprement parler
          startElectionLocal();
 
       }
    }
 
+   /**
+    * On commence ici le processus de l'élection en commencant pas une annonce
+    */
    private void startElectionLocal() {
       try {
          log("############# Starting an election ############");
-         // Setting basic values
-         //isAnnouncing = true;
-
+         
+         // Changement de phase pour de l'annonce
          currentPhase = Phase.ANNOUNCE;
 
-         // Getting the neighbor
-         //neighbor = hosts[(getSiteIndex(localSite) + 1) % hosts.length];
-
-         //-- Preparing the message
+         // On envoie un message d'annonce avec notre aptitude
          AnnounceMessage announceMessage = new AnnounceMessage();
-         announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+         announceMessage.setApptitude(localHostIndex, computeLocalAptitude());
 
+         // on envoie au prochain qui veut bien répondre
          sendQuittancedMessageToNext(announceMessage);
       } catch (IOException ex) {
          Logger.getLogger(ElectionManager.class.getName()).log(Level.SEVERE, null, ex);
@@ -268,17 +361,28 @@ public class ElectionManager implements Closeable {
       log("Announced message sent");
    }
 
+   /**
+    * Lors de la fermeture de l'ElectionManager, on interromp le thread de réception
+    * et on ferme le socket serveur
+    * @throws IOException 
+    */
    @Override
    public void close() throws IOException {
       log("Closing connection");
       serverSocket.close();
-      // TODO arrêter la boucle
 
       electionListener.interrupt();
 
       log("Everything's closed");
    }
 
+   /**
+    * Méthode permettant d'obtenir le site élu
+    * Si le site n'est pas encore décidé, la méthode est bloquante jusqu'à ce qu'un
+    * élu soit disponible
+    * @return  le site qui a été élu
+    * @throws InterruptedException 
+    */
    public Site getElected() throws InterruptedException {
       log("Someone want to get the chosen one");
       // Waiting if there is currently an election to get the new site
@@ -298,10 +402,21 @@ public class ElectionManager implements Closeable {
       return elected;
    }
 
+   /**
+    * permet d'envoyer un message à un site et demande une quittance
+    * Si le site n'est pas atteignable, on envoie au site suivant jusqu'à
+    * ce qu'un des sites réponde
+    * 
+    * Dans le pire des cas, le site émetteur répond à son propre message
+    * @param message
+    * @throws IOException 
+    */
    private void sendQuittancedMessageToNext(Message message) throws IOException {
       log("Sending message " + message.getMessageType());
       boolean unreachable;
+      // on récupère le site suivant à contacter
       neighbor = hosts[(localHostIndex + 1) % hosts.length];
+      
       do {
          unreachable = false;
          try {
@@ -309,24 +424,45 @@ public class ElectionManager implements Closeable {
          } catch (UnreachableRemoteException ex) {
             log("Neigbor unreachable, trying next");
             unreachable = true;
+            // si le site n'est pas atteignable, on contacte le site suivant
             neighbor = hosts[(1 + getSiteIndex(neighbor)) % hosts.length];
          }
       } while (unreachable);
 
    }
 
+   /**
+    * Envoie un message à une certaine addresse
+    * @param message le message à envoyer
+    * @param socketAddress l'addresse pour l'envoi du message
+    * @throws IOException 
+    */
    private void sendMessage(Message message, SocketAddress socketAddress) throws IOException {
       DatagramPacket packet = new DatagramPacket(message.toByteArray(), message.toByteArray().length, socketAddress);
       timedoutSocket.send(packet);
    }
 
+   /**
+    * Envoie un message à un site
+    * @param message le message à envoyer
+    * @param site le site à qui envoyer
+    * @throws IOException 
+    */
    private void sendMessage(Message message, Site site) throws IOException {
       sendMessage(message, site.getSocketAddress());
    }
 
+   /**
+    * Envoi d'u nmessage avec attente de la quittance
+    * @param message le message à envoyer
+    * @param site le site à qui envoyer
+    * @throws IOException
+    * @throws ch.heigvd.prr.election.ElectionManager.UnreachableRemoteException Si le site n'est pas atteignable
+    */
    private void sendQuittancedMessage(Message message, Site site) throws IOException, UnreachableRemoteException {
       sendMessage(message, site);
 
+      // on a un timeout pour l'envoi de message
       try {
          Message m = receiveTimeoutMessage();
          if (m.getMessageType() == Message.MessageType.QUITTANCE) {
@@ -341,12 +477,17 @@ public class ElectionManager implements Closeable {
       }
 
    }
-
+   
+   /**
+    * Réception d'un message et envoi de la quittance
+    * @return le message reçu
+    * @throws IOException
+    */
    private Message receiveAndQuittanceMessage() throws IOException {
       int maxSize = Message.getMaxMessageSize(hosts.length);
       DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
       serverSocket.receive(packet);
-
+      
       // On transmet la quittance
       QuittanceMessage quittanceMessage = new QuittanceMessage();
       sendMessage(quittanceMessage, packet.getSocketAddress());
@@ -354,6 +495,11 @@ public class ElectionManager implements Closeable {
       return Message.parse(packet.getData(), packet.getLength());
    }
 
+   /**
+    * Réception d'un message quelconque
+    * @return le message reçu
+    * @throws IOException 
+    */
    private Message receiveMessage() throws IOException {
       int maxSize = Message.getMaxMessageSize(hosts.length);
       DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
@@ -362,6 +508,12 @@ public class ElectionManager implements Closeable {
       return Message.parse(packet.getData(), packet.getLength());
    }
 
+  /**
+   * 
+   * @return
+   * @throws IOException
+   * @throws SocketTimeoutException 
+   */
    private Message receiveTimeoutMessage() throws IOException, SocketTimeoutException {
       int maxSize = Message.getMaxMessageSize(hosts.length);
       DatagramPacket packet = new DatagramPacket(new byte[maxSize], maxSize);
@@ -371,6 +523,9 @@ public class ElectionManager implements Closeable {
 
    }
 
+   /**
+    * Exception pour le traitement des sites non atteignables
+    */
    private static class UnreachableRemoteException extends Exception {
 
       public UnreachableRemoteException() {
