@@ -98,17 +98,17 @@ public class ElectionManager implements Closeable {
                      log("ANNOUNCE received");
                      AnnounceMessage announceMessage = (AnnounceMessage) message;
 
-                     log("Annonce : " + announceMessage.getApptitudes().toString());
+                     log("Annonce : " + announceMessage.getAptitudes().toString());
                      
                      // On vérifie l'annonce
-                     if (announceMessage.getApptitude(localHostIndex) != null) {
+                     if (announceMessage.getAptitude(localHostIndex) != null) {
                         // Ici, on a déjà écrit notre aptitude dans ce message
                         // On recoit pour la deuxième fois l'annonce, on doit chercher l'élu
                         log("2nd time I received this message - Passing to get RESULTS");
 
                         currentPhase = Phase.RESULT;
 
-                        announceMessage.getApptitudes().entrySet().forEach((entry) -> {
+                        announceMessage.getAptitudes().entrySet().forEach((entry) -> {
                            Byte index = entry.getKey();
                            Integer apptitude = entry.getValue();
 
@@ -143,7 +143,7 @@ public class ElectionManager implements Closeable {
                         log("Updating apptitude and transmitting further");
                         currentPhase = Phase.ANNOUNCE;
                         // On met à jour la liste
-                        announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+                        announceMessage.setAptitude(localHostIndex, computeLocalApptitude());
 
                         // On le retransmet
                         sendQuittancedMessageToNext(announceMessage);
@@ -258,7 +258,7 @@ public class ElectionManager implements Closeable {
 
          //-- Preparing the message
          AnnounceMessage announceMessage = new AnnounceMessage();
-         announceMessage.setApptitude(localHostIndex, computeLocalApptitude());
+         announceMessage.setAptitude(localHostIndex, computeLocalApptitude());
 
          sendQuittancedMessageToNext(announceMessage);
       } catch (IOException ex) {
