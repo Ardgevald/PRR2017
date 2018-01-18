@@ -130,8 +130,6 @@ public class ElectionManager implements Closeable {
                      log("ANNOUNCE received");
                      AnnounceMessage announceMessage = (AnnounceMessage) message;
 
-                     log("Annonce : " + announceMessage.getAptitude(hostIndex).toString());
-
                      // On vérifie l'annonce
                      if (announceMessage.getAptitude(localHostIndex) != null) {
                         /*
