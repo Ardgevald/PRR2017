@@ -9,7 +9,7 @@ import java.util.logging.Logger;
  */
 public class DynamicThreadManager {
 
-   private final int P = 10;
+   private final int P = 10; // P entre 0 et 100
    private final int MINIMUM_WAIT = 5000;
    private final int MAXIMUM_WAIT = 15000;
 
