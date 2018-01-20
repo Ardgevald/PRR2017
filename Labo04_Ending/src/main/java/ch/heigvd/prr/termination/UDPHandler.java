@@ -1,5 +1,6 @@
 package ch.heigvd.prr.termination;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -14,10 +15,10 @@ import java.util.logging.Logger;
  *
  * @author Remi
  */
-public class UDPHandler {
+public class UDPHandler implements Closeable {
 
-	DatagramSocket socket;
-
+	private DatagramSocket socket;
+	private boolean closed = false;
 
 	private UDPHandler(DatagramSocket socket, int maxMessageSize) {
 		this.socket = socket;
@@ -44,6 +45,15 @@ public class UDPHandler {
 		this(new DatagramSocket(), maxMessageSize);
 	}
 
+	@Override
+	public synchronized void close() throws IOException {
+		if (!this.closed) {
+			this.closed = true;
+
+			this.socket.close();
+		}
+	}
+
 	// ------------- LISTENER
 	private Thread listenerThread;
 
@@ -65,11 +75,13 @@ public class UDPHandler {
 
 					// Emmiting an event
 					listeners.forEach(l -> l.dataReceived(packet.getData(), packet.getLength()));
+				} catch (SocketException e) {
+					// Doing nothing, socket can be closed by others
 				} catch (IOException ex) {
 					Logger.getLogger(UDPHandler.class.getName()).log(Level.SEVERE, null, ex);
 				}
 
-			} while (true);
+			} while (!closed);
 		}
 
 	}
@@ -90,7 +102,5 @@ public class UDPHandler {
 		DatagramPacket packet = new DatagramPacket(data, data.length, address);
 		this.socket.send(packet);
 	}
-
-
 
 }

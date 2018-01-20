@@ -1,6 +1,7 @@
 package ch.heigvd.prr.termination;
 
 import ch.heigvd.prr.termination.UDPMessageHandler.UDPMessageListener;
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketException;
 import java.nio.file.Files;
@@ -9,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -16,7 +18,7 @@ import java.util.logging.Logger;
 /**
  *
  */
-public class DynamicThreadManager implements UDPMessageListener {
+public class DynamicThreadManager implements UDPMessageListener, Closeable {
 
 	private final int P = 50; // P entre 0 et 100
 	private final int MINIMUM_WAIT = 5000;
@@ -45,8 +47,6 @@ public class DynamicThreadManager implements UDPMessageListener {
 
 		this.udpMessageHandler = new UDPMessageHandler(localHost.getSocketAddress());
 		this.udpMessageHandler.addListener(this);
-
-		this.newTask();
 	}
 
 	public DynamicThreadManager(String[][] hosts, byte hostIndex) throws SocketException, IOException {
@@ -68,6 +68,11 @@ public class DynamicThreadManager implements UDPMessageListener {
 	}
 
 	private synchronized void newTask() {
+		if (newThreadForbidden) {
+			log("Not accepting any more task");
+			return;
+		}
+
 		Task t = new Task();
 		this.tasks.add(t);
 		new Thread(t).start();
@@ -98,7 +103,7 @@ public class DynamicThreadManager implements UDPMessageListener {
 				} else { // On a déjà vu ce message
 					// Pas besoin d'interdire nes nouveau thread, vu qu'on a initié
 					// la terminaison
-					
+
 					// On ne fait rien, on arrête simplement la propagation
 					log("All of tasks are completed");
 				}
@@ -106,30 +111,11 @@ public class DynamicThreadManager implements UDPMessageListener {
 		}
 	}
 
-	public void initiateTerminaison() {
-		this.forbidNewThreads();
-		this.waitForTasks();
-
-		try {
-			this.udpMessageHandler.sendTo(new Message.EndTokenMessage(), getNextSite());
-		} catch (IOException ex) {
-			Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
-		}
-	}
-
 	private class Task implements Runnable {
 
 		@Override
 		public void run() {
-			boolean beginNewTask;
 
-			synchronized (DynamicThreadManager.this) {
-				if (newThreadForbidden) {
-					log("Not accepting any more task");
-					return;
-				}
-			}
-			
 			log("Starting task");
 			try {
 				Thread.sleep(ThreadLocalRandom.current().nextInt(MINIMUM_WAIT, MAXIMUM_WAIT));
@@ -139,7 +125,7 @@ public class DynamicThreadManager implements UDPMessageListener {
 			}
 			log("Task completed");
 
-			beginNewTask = ThreadLocalRandom.current().nextInt(100) < P;
+			boolean beginNewTask = ThreadLocalRandom.current().nextInt(100) < P;
 
 			if (beginNewTask) {
 				try {
@@ -180,18 +166,41 @@ public class DynamicThreadManager implements UDPMessageListener {
 		return hosts[(localHostIndex + 1) % hosts.length];
 	}
 
+	@Override
+	public void close() throws IOException {
+		this.initiateTerminaison();
+		this.udpMessageHandler.close();
+	}
+
 	private void log(String message) {
 		System.out.println(localHostIndex + ": " + message);
 	}
-	
+
 	// --- APP interface ---
-	
+	public void initiateTerminaison() {
+		this.forbidNewThreads();
+		this.waitForTasks();
+
+		try {
+			Message.EndTokenMessage m = new Message.EndTokenMessage();
+			m.incrementCounter(); // We have seen it
+			this.udpMessageHandler.sendTo(new Message.EndTokenMessage(), getNextSite());
+		} catch (IOException ex) {
+			Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+		}
+	}
+
+	public void initiateTask() {
+		this.newTask();
+	}
 
 	public static void main(String... args) {
+		/*
 		DynamicThreadManager[] managers = new DynamicThreadManager[4];
 		for (int i = 0; i < 4; i++) {
 			try {
 				managers[i] = new DynamicThreadManager((byte) i);
+				managers[i].initiateTask();
 			} catch (IOException ex) {
 				Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
 			}
@@ -205,6 +214,80 @@ public class DynamicThreadManager implements UDPMessageListener {
 		}
 
 		managers[0].initiateTerminaison();
+		 */
+
+		// Récupération du numéro de site
+		Scanner scanner = new Scanner(System.in);
+		boolean ok;
+		int host = 0;		
+		do {
+			ok = true;
+			System.out.print("No de site courant: ");
+			try {
+				host = scanner.nextInt();
+
+				if (host > 4 || host < 1) {
+					throw new IndexOutOfBoundsException();
+				}
+			} catch (Exception e) {
+				System.out.println("No de site incorrecte, réessayer");
+				ok = false;
+			}
+		} while (!ok);
+
+		// Lancement du site
+		DynamicThreadManager manager = null;
+		try {
+			manager = new DynamicThreadManager((byte)(host -1));
+		} catch (IOException ex) {
+			System.err.println("Problème lors de la création du manager");
+			ex.printStackTrace();
+			System.exit(-1);
+		}
+		
+		// Menu
+		boolean exit = false;
+		do {
+			System.out.println("\t1. Lancer une tâche");
+			System.out.println("\t2. Initier la terminaison");
+			System.out.println("\t3. Terminer le programme");
+			System.out.println("Entrer le numéro correspondant à l'action voulue: ");
+			
+			try {
+				int num = scanner.nextInt();
+
+				if (num > 3 || num < 1) {
+					throw new IndexOutOfBoundsException();
+				}
+				
+				// Handling menu action
+				switch(num){
+					case 1:
+						System.out.println("Lancement d'une nouvelle tâche");
+						manager.initiateTask();
+						break;
+					case 2:
+						System.out.println("Demande de terminaison");
+						manager.initiateTerminaison();
+						break;
+					case 3:
+						exit = true;
+						break;
+				}
+				
+			} catch (Exception e) {
+				System.out.println("No incorrecte, réessayer");
+			}
+		} while (!exit);
+		
+		try {
+			// On quitte, on ferme les connexion
+			manager.close();
+			scanner.close();
+		} catch (IOException ex) {
+			Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+		}
+		
 
 	}
 

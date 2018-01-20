@@ -3,6 +3,7 @@ package ch.heigvd.prr.termination;
 import ch.heigvd.prr.termination.Message;
 import ch.heigvd.prr.termination.UDPHandler;
 import ch.heigvd.prr.termination.UDPHandler.UDPListener;
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
