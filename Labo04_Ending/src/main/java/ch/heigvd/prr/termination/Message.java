@@ -32,7 +32,7 @@ public abstract class Message {
 	 * @return la taille du message si appelé avec la méthode toByteArray(), en
 	 * byte
 	 */
-	public static int getMaxMessageSize(int numberOfHost) {
+	public static int getMaxMessageSize() {
 		return MessageType.BYTES;
 	}
 

@@ -18,6 +18,7 @@ public class UDPHandler {
 
 	DatagramSocket socket;
 
+
 	private UDPHandler(DatagramSocket socket, int maxMessageSize) {
 		this.socket = socket;
 		this.listenerThread = new Thread(new UDPReceiver(maxMessageSize));
@@ -90,12 +91,6 @@ public class UDPHandler {
 		this.socket.send(packet);
 	}
 
-	public void sendTo(Message message, InetSocketAddress address) throws IOException {
-		this.sendTo(message.toByteArray(), address);
-	}
 
-	public void sendTo(Message message, Site site) throws IOException {
-		this.sendTo(message, site.getSocketAddress());
-	}
 
 }
