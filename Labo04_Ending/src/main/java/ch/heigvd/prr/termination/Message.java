@@ -13,10 +13,10 @@ import ch.heigvd.prr.termination.util.ByteIntConverter;
  * message.
  *
  * Plus de détail dans chacune des sous-classe
- * 
- * Remarquons que cette classe est un peu overkill pour son utilisation dans
- * le contexte du labo. Cependant, elle est facilement adaptable à d'autre 
- * messages qui pourraient être voulu dans un autre contexte
+ *
+ * Remarquons que cette classe est un peu overkill pour son utilisation dans le
+ * contexte du labo. Cependant, elle est facilement adaptable à d'autre messages
+ * qui pourraient être voulu dans un autre contexte
  *
  * @author Miguel Pombo Dias
  * @author Rémi Jacquemard
@@ -25,15 +25,14 @@ public abstract class Message {
 
 	/**
 	 * Permet de récupérer la taille maximal possible d'un message à partir du
-	 * nombre de site. Dans notre cas d'école, de simple type de message sont
-	 * envoyé: un byte suffit donc
+	 * nombre de site. Dans notre cas d'école, le plus grand message est le jeton
+	 * de terminaison, avec un byte pour le type et un byte pour le compteur
 	 *
-	 * @param numberOfHost le nombre de sites
-	 * @return la taille du message si appelé avec la méthode toByteArray(), en
-	 * byte
+	 * @return la taille maximal du message si appelé avec la méthode
+	 * toByteArray(), en byte
 	 */
 	public static int getMaxMessageSize() {
-		return MessageType.BYTES;
+		return MessageType.BYTES + 1;
 	}
 
 	/**
@@ -132,7 +131,7 @@ public abstract class Message {
 
 		switch (type) {
 			case END_TOKEN:
-				return new EndTokenMessage();
+				return new EndTokenMessage(data, size);
 			case START_TASK:
 				return new StartTaskMessage();
 			default:
@@ -141,24 +140,41 @@ public abstract class Message {
 	}
 
 	// ------------- SUBCLASSES ---------------- //
-
 	/**
-	 * Indique à un site le démarrage d'une tâche. Dans un contexte réel, 
-	 * nn trouverai dans ce message la tâche à effectuer (par exemple un calcul)
+	 * Indique à un site le démarrage d'une tâche. Dans un contexte réel, nn
+	 * trouverai dans ce message la tâche à effectuer (par exemple un calcul)
 	 */
-	public static class StartTaskMessage extends Message{
+	public static class StartTaskMessage extends Message {
 
 		@Override
 		protected MessageType getMessageType() {
-			return MessageType.END_TOKEN;
+			return MessageType.START_TASK;
 		}
-		
+
 	}
-	
+
 	/**
-	 * Représente le jeton de terminaison. 
+	 * Représente le jeton de terminaison.
 	 */
 	public static class EndTokenMessage extends Message {
+
+		/**
+		 * On utilise ici un compteur comptant le nombre de site ayant vu ce
+		 * message. On aurait aussi pu utiliser, dans notre cas, l'index du site
+		 * initiateur. On pourrait le faire vu que dans ce labo, un site devenu
+		 * inactif suite au passage du jeton le reste et refuse tout nouveau
+		 * thread. Cependant, le compteur offre une plus grande modularité si on
+		 * souhaite traiter les cas de réactivation de thread.
+		 */
+		private byte counter;
+
+		public EndTokenMessage() {
+			this.counter = 0;
+		}
+
+		private EndTokenMessage(byte[] data, int size) {
+			this.counter = data[1];
+		}
 
 		/**
 		 * Permet d'indiquer la terminaison
@@ -169,6 +185,26 @@ public abstract class Message {
 		protected MessageType getMessageType() {
 			return MessageType.END_TOKEN;
 		}
+
+		@Override
+		public List<Byte> toByteList() {
+			List<Byte> bytes = super.toByteList();
+			bytes.add(counter);
+			return bytes;
+		}
+
+		public byte getCounter() {
+			return counter;
+		}
+
+		public void setCounter(byte counter) {
+			this.counter = counter;
+		}
+
+		public void incrementCounter() {
+			this.counter++;
+		}
+
 	}
 
 }
