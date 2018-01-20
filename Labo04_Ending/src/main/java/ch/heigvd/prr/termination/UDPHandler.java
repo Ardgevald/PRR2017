@@ -18,15 +18,20 @@ public class UDPHandler {
 
 	DatagramSocket socket;
 
+	private UDPHandler(DatagramSocket socket, int maxMessageSize) {
+		this.socket = socket;
+		this.listenerThread = new Thread(new UDPReceiver(maxMessageSize));
+		this.listenerThread.start();
+	}
+
 	/**
 	 * Lie sur le port/adress précisé en paramètre
 	 *
 	 * @param address
 	 * @throws SocketException
 	 */
-	public UDPHandler(InetSocketAddress address) throws SocketException {
-		this.socket = new DatagramSocket(address);
-		this.listenerThread.start();
+	public UDPHandler(InetSocketAddress address, int maxMessageSize) throws SocketException {
+		this(new DatagramSocket(address), maxMessageSize);
 	}
 
 	/**
@@ -34,13 +39,13 @@ public class UDPHandler {
 	 *
 	 * @throws SocketException
 	 */
-	public UDPHandler() throws SocketException {
-		this.socket = new DatagramSocket();
-		this.listenerThread.start();;
+	public UDPHandler(int maxMessageSize) throws SocketException {
+		this(new DatagramSocket(), maxMessageSize);
 	}
 
 	// ------------- LISTENER
-	private Thread listenerThread = new Thread(UDPReceiver);
+	private Thread listenerThread;
+
 	private class UDPReceiver implements Runnable {
 
 		private final int maxMessageSize;
@@ -56,9 +61,9 @@ public class UDPHandler {
 			do {
 				try {
 					socket.receive(packet);
-					
+
 					// Emmiting an event
-					listeners.forEach(l -> l.dataReceived(packet.getData(), packet.getLength()));					
+					listeners.forEach(l -> l.dataReceived(packet.getData(), packet.getLength()));
 				} catch (IOException ex) {
 					Logger.getLogger(UDPHandler.class.getName()).log(Level.SEVERE, null, ex);
 				}
@@ -67,14 +72,15 @@ public class UDPHandler {
 		}
 
 	}
-	
+
 	private List<UDPListener> listeners = new ArrayList<>();
-	
-	public interface UDPListener{
+
+	public interface UDPListener {
+
 		public void dataReceived(byte[] data, int length);
 	}
-	
-	public void addListener(UDPListener listener){
+
+	public void addListener(UDPListener listener) {
 		this.listeners.add(listener);
 	}
 
