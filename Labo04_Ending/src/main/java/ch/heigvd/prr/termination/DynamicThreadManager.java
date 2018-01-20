@@ -86,8 +86,8 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 				this.newTask();
 				break;
 			case END_TOKEN:
-				log("END_TASK receive");
 				Message.EndTokenMessage endMessage = (Message.EndTokenMessage) message;
+				log("END_TASK receive, counter = " + endMessage.getCounter());
 
 				// Si le compteur est égal au nombre de site, le jeton a fait le 
 				// tour, tous le monde la vu et on peut arrêter la propagation
@@ -177,14 +177,14 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 	}
 
 	// --- APP interface ---
-	public void initiateTerminaison() {
+	public synchronized void initiateTerminaison() {
 		this.forbidNewThreads();
 		this.waitForTasks();
 
 		try {
 			Message.EndTokenMessage m = new Message.EndTokenMessage();
 			m.incrementCounter(); // We have seen it
-			this.udpMessageHandler.sendTo(new Message.EndTokenMessage(), getNextSite());
+			this.udpMessageHandler.sendTo(m, getNextSite());
 		} catch (IOException ex) {
 			Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
 		}
@@ -219,7 +219,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 		// Récupération du numéro de site
 		Scanner scanner = new Scanner(System.in);
 		boolean ok;
-		int host = 0;		
+		int host = 0;
 		do {
 			ok = true;
 			System.out.print("No de site courant: ");
@@ -238,13 +238,13 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 		// Lancement du site
 		DynamicThreadManager manager = null;
 		try {
-			manager = new DynamicThreadManager((byte)(host -1));
+			manager = new DynamicThreadManager((byte) (host - 1));
 		} catch (IOException ex) {
 			System.err.println("Problème lors de la création du manager");
 			ex.printStackTrace();
 			System.exit(-1);
 		}
-		
+
 		// Menu
 		boolean exit = false;
 		do {
@@ -252,16 +252,16 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 			System.out.println("\t2. Initier la terminaison");
 			System.out.println("\t3. Terminer le programme");
 			System.out.println("Entrer le numéro correspondant à l'action voulue: ");
-			
+
 			try {
 				int num = scanner.nextInt();
 
 				if (num > 3 || num < 1) {
 					throw new IndexOutOfBoundsException();
 				}
-				
+
 				// Handling menu action
-				switch(num){
+				switch (num) {
 					case 1:
 						System.out.println("Lancement d'une nouvelle tâche");
 						manager.initiateTask();
@@ -274,12 +274,12 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 						exit = true;
 						break;
 				}
-				
+
 			} catch (Exception e) {
 				System.out.println("No incorrecte, réessayer");
 			}
 		} while (!exit);
-		
+
 		try {
 			// On quitte, on ferme les connexion
 			manager.close();
@@ -287,7 +287,6 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 		} catch (IOException ex) {
 			Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
 		}
-		
 
 	}
 
