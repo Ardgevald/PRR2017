@@ -39,7 +39,7 @@ public abstract class Message {
 	 * Représente les différents types de message transitant sur le réseau
 	 */
 	public static enum MessageType {
-		START_TASK, END_TOKEN;
+		START_TASK, ENDING_TOKEN, END;
 
 		/**
 		 * Permet de récupérer le numéro de type en byte de ce message. Utilisé
@@ -130,10 +130,12 @@ public abstract class Message {
 		MessageType type = MessageType.getMessageType(data[0]);
 
 		switch (type) {
-			case END_TOKEN:
-				return new EndTokenMessage(data, size);
+			case ENDING_TOKEN:
+				return new EndingTokenMessage(data, size);
 			case START_TASK:
-				return new StartTaskMessage();
+				return new StartTaskMessage(data,size);
+			case END:
+				return new EndMessage(data, size);
 			default:
 				return null;
 		}
@@ -146,17 +148,44 @@ public abstract class Message {
 	 */
 	public static class StartTaskMessage extends Message {
 
+		private byte siteIndex;
+		
+		public StartTaskMessage(byte siteIndex){
+			this.siteIndex = siteIndex;
+		}
+		
+		public StartTaskMessage(byte[] data, int size){
+			this.siteIndex = data[1];
+		}
+		
 		@Override
 		protected MessageType getMessageType() {
 			return MessageType.START_TASK;
 		}
+		
+		@Override
+		public List<Byte> toByteList() {
+			List<Byte> bytes = super.toByteList();
+			bytes.add(siteIndex);
+			return bytes;
+		}
+
+		public byte getSiteIndex() {
+			return siteIndex;
+		}
+
+		public void setSiteIndex(byte siteIndex) {
+			this.siteIndex = siteIndex;
+		}
+		
+		
 
 	}
 
 	/**
 	 * Représente le jeton de terminaison.
 	 */
-	public static class EndTokenMessage extends Message {
+	public static class EndingTokenMessage extends Message {
 
 		/**
 		 * On utilise ici un compteur comptant le nombre de site ayant vu ce
@@ -168,11 +197,11 @@ public abstract class Message {
 		 */
 		private byte counter;
 
-		public EndTokenMessage() {
+		public EndingTokenMessage() {
 			this.counter = 0;
 		}
 
-		private EndTokenMessage(byte[] data, int size) {
+		private EndingTokenMessage(byte[] data, int size) {
 			this.counter = data[1];
 		}
 
@@ -183,7 +212,7 @@ public abstract class Message {
 		 */
 		@Override
 		protected MessageType getMessageType() {
-			return MessageType.END_TOKEN;
+			return MessageType.ENDING_TOKEN;
 		}
 
 		@Override
@@ -203,6 +232,57 @@ public abstract class Message {
 
 		public void incrementCounter() {
 			this.counter++;
+		}
+
+	}
+	
+	/**
+	 * Indique à un site que l'application est terminée.
+	 */
+	public static class EndMessage extends Message {
+
+		
+		/**
+		 * On utilise ici un compteur comptant le nombre de site ayant vu ce
+		 * message. On aurait aussi pu utiliser, dans notre cas, l'index du site
+		 * initiateur. On pourrait le faire vu que dans ce labo, un site devenu
+		 * inactif suite au passage du jeton le reste et refuse tout nouveau
+		 * thread. Cependant, le compteur offre une plus grande modularité si on
+		 * souhaite traiter les cas de réactivation de thread.
+		 */
+		private byte counter;
+
+		public EndMessage() {
+			this.counter = 0;
+		}
+
+		private EndMessage(byte[] data, int size) {
+			this.counter = data[1];
+		}
+
+
+		@Override
+		public List<Byte> toByteList() {
+			List<Byte> bytes = super.toByteList();
+			bytes.add(counter);
+			return bytes;
+		}
+
+		public byte getCounter() {
+			return counter;
+		}
+
+		public void setCounter(byte counter) {
+			this.counter = counter;
+		}
+
+		public void incrementCounter() {
+			this.counter++;
+		}
+		
+		@Override
+		protected MessageType getMessageType() {
+			return MessageType.END;
 		}
 
 	}
