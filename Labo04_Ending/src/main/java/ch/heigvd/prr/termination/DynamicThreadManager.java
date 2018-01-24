@@ -21,9 +21,9 @@ import java.util.logging.Logger;
  */
 public class DynamicThreadManager implements UDPMessageListener, Closeable {
 
-   private final int P = 50; // P entre 0 et 100
+   private final int P = 49; // P entre 0 et 100
    private final int MINIMUM_WAIT = 5000;
-   private final int MAXIMUM_WAIT = 15000;
+   private final int MAXIMUM_WAIT = 8000;
 
    private final byte localHostIndex;
 
@@ -311,13 +311,12 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
       do {
          System.out.println("\t1. Lancer une tâche");
          System.out.println("\t2. Initier la terminaison");
-         System.out.println("\t3. Terminer le programme");
          System.out.println("Entrer le numéro correspondant à l'action voulue: ");
 
          try {
             int num = scanner.nextInt();
 
-            if (num > 3 || num < 1) {
+            if (num > 2 || num < 1) {
                throw new IndexOutOfBoundsException();
             }
 
@@ -330,9 +329,6 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
                case 2:
                   System.out.println("Demande de terminaison");
                   manager.initiateTerminaison();
-                  break;
-               case 3:
-                  exit = true;
                   break;
             }
 
