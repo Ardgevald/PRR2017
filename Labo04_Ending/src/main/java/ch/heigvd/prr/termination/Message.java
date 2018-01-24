@@ -128,7 +128,7 @@ public abstract class Message {
 
 		switch (type) {
 			case TOKEN:
-				return new TokenMessage();
+				return new TokenMessage(data, size);
 			case START_TASK:
 				return new StartTaskMessage(data,size);
 			case END:
@@ -184,8 +184,26 @@ public abstract class Message {
 	 */
 	public static class TokenMessage extends Message {
 
-		public TokenMessage() {
+      private final byte initiator;
+      
+		public TokenMessage(byte initiator) {
+         this.initiator = initiator;
 		}
+      
+      public TokenMessage(byte[] data, int size){
+         this.initiator = data[1];
+      }
+      
+      @Override
+		public List<Byte> toByteList() {
+			List<Byte> bytes = super.toByteList();
+			bytes.add(initiator);
+			return bytes;
+		}
+
+      public byte getInitiator() {
+         return initiator;
+      }
       
 		/**
 		 * Permet d'indiquer la terminaison
@@ -203,30 +221,25 @@ public abstract class Message {
 	 */
 	public static class EndMessage extends Message {
 
-		private byte initiateur;
+		private final byte initiator;
 
 		public EndMessage(byte initiateur) {
-			this.initiateur = initiateur;
+			this.initiator = initiateur;
 		}
 
 		private EndMessage(byte[] data, int size) {
-			this.initiateur = data[1];
+			this.initiator = data[1];
 		}
-
 
 		@Override
 		public List<Byte> toByteList() {
 			List<Byte> bytes = super.toByteList();
-			bytes.add(initiateur);
+			bytes.add(initiator);
 			return bytes;
 		}
 
-		public byte getInitiateur() {
-			return initiateur;
-		}
-
-		public void setInitiateur(byte initiateur) {
-			this.initiateur = initiateur;
+		public byte getInitiator() {
+			return initiator;
 		}
 		
 		@Override

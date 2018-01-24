@@ -106,12 +106,21 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
             Message.TokenMessage tokenMessage = (Message.TokenMessage) message;
             log("ENDING_TASK receive");
 
-            /**
-             * Si on est le site initiateur, tous le monde la vu le jeton et on peut
-             * peut-être arrêter la propagation Si on est resté dans l'état inactif,
-             * l'application est vraiment terminée
-             */
-            if (isInitiator && !running) {
+            if (isInitiator && tokenMessage.getInitiator() > localHostIndex) {
+               /**
+                * Si on est un site initiateur et que ce n'est pas notre index qui
+                * est indiqué dans le jeton, cela signifie qu'un autre jeton est en
+                * train de circuler. Dans le cas où ce jeton est d'un indice plus
+                * élevé, on ne transfère pas le jeton plus loin et on attend le jeton
+                * que l'on a initié
+                */
+
+            } else if (isInitiator && tokenMessage.getInitiator() == localHostIndex && !running) {
+               /**
+                * Si on est un site initiateur et qu'il s'agit de notre jeton, tous
+                * le monde a vu ce jeton et on peut peut-être arrêter la propagation
+                * Si on est resté dans l'état inactif. Alors on termine l'application
+                */
                log("App is now completed, sending END to everyone");
 
                try {
@@ -123,7 +132,6 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
                }
             } else {
                // On termine nos taches
-               //this.forbidNewThreads();
                this.waitForTaskEnds();
 
                try {
@@ -139,7 +147,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
             log("Application is terminated, shuting down");
             Message.EndMessage endMessage = (Message.EndMessage) message;
 
-            if (endMessage.getInitiateur() != localHostIndex) {
+            if (endMessage.getInitiator() != localHostIndex) {
                // On doit retransmettre le message
                try {
                   this.udpMessageHandler.sendTo(endMessage, getNextSite());
@@ -231,7 +239,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
       this.waitForTaskEnds();
 
       try {
-         Message.TokenMessage m = new Message.TokenMessage();
+         Message.TokenMessage m = new Message.TokenMessage(localHostIndex);
          this.udpMessageHandler.sendTo(m, getNextSite());
       } catch (IOException ex) {
          Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
