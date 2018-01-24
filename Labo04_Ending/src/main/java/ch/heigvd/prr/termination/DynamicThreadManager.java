@@ -28,7 +28,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
    private final byte localHostIndex;
 
    private boolean isInitiator = false;
-   private boolean newThreadForbidden = false;
+   private boolean endingPhase = false;
    private boolean running = false;
 
    private final Site[] hosts;
@@ -100,8 +100,8 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 
             break;
          case TOKEN:
-            // on stope la création de nouveaux threads par l'utilisateur
-            newThreadForbidden = true;
+            // on passe en phase de terminaison
+            endingPhase = true;
 
             Message.TokenMessage tokenMessage = (Message.TokenMessage) message;
             log("ENDING_TASK receive");
@@ -233,21 +233,25 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 
    // --- APP interface ---
    public synchronized void initiateTerminaison() {
-      newThreadForbidden = true;
-      isInitiator = true;
+      // on ne lance pas de terminaison si une terminaison est en cours
+      if (!endingPhase) {
+         endingPhase = true;
+         isInitiator = true;
 
-      this.waitForTaskEnds();
+         this.waitForTaskEnds();
 
-      try {
-         Message.TokenMessage m = new Message.TokenMessage(localHostIndex);
-         this.udpMessageHandler.sendTo(m, getNextSite());
-      } catch (IOException ex) {
-         Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+         try {
+            Message.TokenMessage m = new Message.TokenMessage(localHostIndex);
+            this.udpMessageHandler.sendTo(m, getNextSite());
+         } catch (IOException ex) {
+            Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+         }
       }
    }
 
    public synchronized void initiateTask() {
-      if (!newThreadForbidden) {
+      // on interdit la création de nouvelles tâches si une terminaison est en cours
+      if (!endingPhase) {
          this.newTask();
       }
    }

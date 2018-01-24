@@ -140,12 +140,13 @@ public abstract class Message {
 
 	// ------------- SUBCLASSES ---------------- //
 	/**
-	 * Indique à un site le démarrage d'une tâche. Dans un contexte réel, nn
+	 * Indique à un site le démarrage d'une tâche. Dans un contexte réel, on
 	 * trouverai dans ce message la tâche à effectuer (par exemple un calcul)
 	 */
 	public static class StartTaskMessage extends Message {
 
-		private byte siteIndex;
+      // l'indice du site pour qui est destiné le travail
+		private final byte siteIndex;
 		
 		public StartTaskMessage(byte siteIndex){
 			this.siteIndex = siteIndex;
@@ -170,17 +171,11 @@ public abstract class Message {
 		public byte getSiteIndex() {
 			return siteIndex;
 		}
-
-		public void setSiteIndex(byte siteIndex) {
-			this.siteIndex = siteIndex;
-		}
-		
-		
-
 	}
 
 	/**
-	 * Représente le jeton de terminaison.
+	 * Représente le jeton de terminaison et contient celui qui a créé ce Jeton.
+    * On met cette information dans le jeton plutôt que dans
 	 */
 	public static class TokenMessage extends Message {
 
