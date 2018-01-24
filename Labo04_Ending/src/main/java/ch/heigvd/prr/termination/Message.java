@@ -5,7 +5,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import ch.heigvd.prr.termination.util.ByteIntConverter;
 
 /**
  * Cette classe représente un message envoyé sur le réseau. Cette classe est
