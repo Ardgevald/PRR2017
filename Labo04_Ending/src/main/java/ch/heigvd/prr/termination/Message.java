@@ -1,10 +1,8 @@
 package ch.heigvd.prr.termination;
 
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Cette classe représente un message envoyé sur le réseau. Cette classe est
@@ -38,7 +36,7 @@ public abstract class Message {
 	 * Représente les différents types de message transitant sur le réseau
 	 */
 	public static enum MessageType {
-		START_TASK, ENDING_TOKEN, END;
+		START_TASK, TOKEN, END;
 
 		/**
 		 * Permet de récupérer le numéro de type en byte de ce message. Utilisé
@@ -129,8 +127,8 @@ public abstract class Message {
 		MessageType type = MessageType.getMessageType(data[0]);
 
 		switch (type) {
-			case ENDING_TOKEN:
-				return new EndingTokenMessage(data, size);
+			case TOKEN:
+				return new TokenMessage(data, size);
 			case START_TASK:
 				return new StartTaskMessage(data,size);
 			case END:
@@ -142,12 +140,13 @@ public abstract class Message {
 
 	// ------------- SUBCLASSES ---------------- //
 	/**
-	 * Indique à un site le démarrage d'une tâche. Dans un contexte réel, nn
+	 * Indique à un site le démarrage d'une tâche. Dans un contexte réel, on
 	 * trouverai dans ce message la tâche à effectuer (par exemple un calcul)
 	 */
 	public static class StartTaskMessage extends Message {
 
-		private byte siteIndex;
+      // l'indice du site pour qui est destiné le travail
+		private final byte siteIndex;
 		
 		public StartTaskMessage(byte siteIndex){
 			this.siteIndex = siteIndex;
@@ -172,38 +171,35 @@ public abstract class Message {
 		public byte getSiteIndex() {
 			return siteIndex;
 		}
-
-		public void setSiteIndex(byte siteIndex) {
-			this.siteIndex = siteIndex;
-		}
-		
-		
-
 	}
 
 	/**
-	 * Représente le jeton de terminaison.
+	 * Représente le jeton de terminaison et contient celui qui a créé ce Jeton.
+    * On met cette information dans le jeton plutôt que dans
 	 */
-	public static class EndingTokenMessage extends Message {
+	public static class TokenMessage extends Message {
 
-		/**
-		 * On utilise ici un compteur comptant le nombre de site ayant vu ce
-		 * message. On aurait aussi pu utiliser, dans notre cas, l'index du site
-		 * initiateur. On pourrait le faire vu que dans ce labo, un site devenu
-		 * inactif suite au passage du jeton le reste et refuse tout nouveau
-		 * thread. Cependant, le compteur offre une plus grande modularité si on
-		 * souhaite traiter les cas de réactivation de thread.
-		 */
-		private byte counter;
-
-		public EndingTokenMessage() {
-			this.counter = 0;
+      private final byte initiator;
+      
+		public TokenMessage(byte initiator) {
+         this.initiator = initiator;
+		}
+      
+      public TokenMessage(byte[] data, int size){
+         this.initiator = data[1];
+      }
+      
+      @Override
+		public List<Byte> toByteList() {
+			List<Byte> bytes = super.toByteList();
+			bytes.add(initiator);
+			return bytes;
 		}
 
-		private EndingTokenMessage(byte[] data, int size) {
-			this.counter = data[1];
-		}
-
+      public byte getInitiator() {
+         return initiator;
+      }
+      
 		/**
 		 * Permet d'indiquer la terminaison
 		 *
@@ -211,28 +207,8 @@ public abstract class Message {
 		 */
 		@Override
 		protected MessageType getMessageType() {
-			return MessageType.ENDING_TOKEN;
+			return MessageType.TOKEN;
 		}
-
-		@Override
-		public List<Byte> toByteList() {
-			List<Byte> bytes = super.toByteList();
-			bytes.add(counter);
-			return bytes;
-		}
-
-		public byte getCounter() {
-			return counter;
-		}
-
-		public void setCounter(byte counter) {
-			this.counter = counter;
-		}
-
-		public void incrementCounter() {
-			this.counter++;
-		}
-
 	}
 	
 	/**
@@ -240,43 +216,25 @@ public abstract class Message {
 	 */
 	public static class EndMessage extends Message {
 
-		
-		/**
-		 * On utilise ici un compteur comptant le nombre de site ayant vu ce
-		 * message. On aurait aussi pu utiliser, dans notre cas, l'index du site
-		 * initiateur. On pourrait le faire vu que dans ce labo, un site devenu
-		 * inactif suite au passage du jeton le reste et refuse tout nouveau
-		 * thread. Cependant, le compteur offre une plus grande modularité si on
-		 * souhaite traiter les cas de réactivation de thread.
-		 */
-		private byte counter;
+		private final byte initiator;
 
-		public EndMessage() {
-			this.counter = 0;
+		public EndMessage(byte initiateur) {
+			this.initiator = initiateur;
 		}
 
 		private EndMessage(byte[] data, int size) {
-			this.counter = data[1];
+			this.initiator = data[1];
 		}
-
 
 		@Override
 		public List<Byte> toByteList() {
 			List<Byte> bytes = super.toByteList();
-			bytes.add(counter);
+			bytes.add(initiator);
 			return bytes;
 		}
 
-		public byte getCounter() {
-			return counter;
-		}
-
-		public void setCounter(byte counter) {
-			this.counter = counter;
-		}
-
-		public void incrementCounter() {
-			this.counter++;
+		public byte getInitiator() {
+			return initiator;
 		}
 		
 		@Override
