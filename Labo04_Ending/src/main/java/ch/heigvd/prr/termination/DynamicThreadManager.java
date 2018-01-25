@@ -15,6 +15,7 @@ import java.util.Scanner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import ch.heigvd.prr.termination.Message.*;
 
 /**
  *
@@ -43,7 +44,9 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 
    // ------- Constructors ------
    // Main constructor
-   public DynamicThreadManager(Site[] hosts, byte localHostIndex) throws SocketException, IOException {
+   public DynamicThreadManager(Site[] hosts, byte localHostIndex)
+      throws SocketException, IOException {
+
       this.hosts = hosts;
       this.localHostIndex = localHostIndex;
       this.localHost = hosts[localHostIndex];
@@ -52,13 +55,29 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
       this.udpMessageHandler.addListener(this);
    }
 
-   public DynamicThreadManager(String[][] hosts, byte hostIndex) throws SocketException, IOException {
+   /**
+    * constructeur utilisant des tableaux décrivant des hôtes en paramètre
+    *
+    * @param hosts Les tableaux d'hôtes
+    * @param hostIndex Le numéro du site courant
+    * @throws SocketException Problème avec la création du socker
+    * @throws IOException Problème de transfert de message
+    */
+   public DynamicThreadManager(String[][] hosts, byte hostIndex)
+      throws SocketException, IOException {
       this(Arrays.stream(hosts)
          .map((s) -> new Site(s[0], Integer.parseInt(s[1])))
          .toArray(Site[]::new), hostIndex);
 
    }
 
+   /**
+    * constructeur utilisant le fichier hosts.txt pour la desciption des sites
+    *
+    * @param hostIndex Le numéro du site courant
+    * @throws SocketException Problème avec la création du socker
+    * @throws IOException Problème de transfert de message
+    */
    public DynamicThreadManager(byte hostIndex) throws IOException {
       // Retreiving the other hosts from the hosts.txt file;
       this(Files.readAllLines(Paths.get("hosts.txt")).stream()
@@ -66,8 +85,11 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
          .toArray(String[][]::new), hostIndex);
    }
 
+   /**
+    * permet de créer une nouvelle tâche (le site devient actif si ce n'était pas le
+    * cas)
+    */
    private synchronized void newTask() {
-
       running = true;
 
       Task t = new Task();
@@ -75,13 +97,19 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
       new Thread(t).start();
    }
 
+   /**
+    * Permet de gérer la réception d'un message appelé par UDPMessageHandler
+    *
+    * @param message le message reçu
+    */
    @Override
    public void dataReceived(Message message) {
       switch (message.getMessageType()) {
          case START_TASK:
-            Message.StartTaskMessage startMessage = (Message.StartTaskMessage) message;
+            StartTaskMessage startMessage = (StartTaskMessage) message;
 
-            // on considère que le site est running si lui ou un suivant effectue une tâche 
+            // on considère que le site est running si lui
+            // ou un suivant effectue une tâche 
             running = true;
 
             if (startMessage.getSiteIndex() == localHostIndex) {
@@ -90,20 +118,24 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
                this.newTask();
             } else {
                try {
-                  log("START_TASK for " + (startMessage.getSiteIndex() + 1) + " received, transmitting further");
+                  log("START_TASK for " + (startMessage.getSiteIndex() + 1)
+                     + " received, transmitting further");
+
                   // Sinon, on la transmet plus loin
                   this.udpMessageHandler.sendTo(startMessage, getNextSite());
                } catch (IOException ex) {
-                  Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+                  Logger.getLogger(DynamicThreadManager.class.getName())
+                     .log(Level.SEVERE, null, ex);
                }
             }
 
             break;
          case TOKEN:
-            // on passe en phase de terminaison
+            // on passe en phase de terminaison (empêche le client
+            // de créer de nouvelles tâches)
             endingPhase = true;
 
-            Message.TokenMessage tokenMessage = (Message.TokenMessage) message;
+            TokenMessage tokenMessage = (TokenMessage) message;
             log("ENDING_TASK receive");
 
             if (isInitiator && tokenMessage.getInitiator() > localHostIndex) {
@@ -111,11 +143,12 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
                 * Si on est un site initiateur et que ce n'est pas notre index qui
                 * est indiqué dans le jeton, cela signifie qu'un autre jeton est en
                 * train de circuler. Dans le cas où ce jeton est d'un indice plus
-                * élevé, on ne transfère pas le jeton plus loin et on attend le jeton
-                * que l'on a initié
+                * élevé (pour départager celui qui doit être gardé), on ne transfère
+                * pas le jeton plus loin et on attend le jeton que l'on a initié
                 */
 
-            } else if (isInitiator && tokenMessage.getInitiator() == localHostIndex && !running) {
+            } else if (isInitiator
+               && tokenMessage.getInitiator() == localHostIndex && !running) {
                /**
                 * Si on est un site initiateur et qu'il s'agit de notre jeton, tous
                 * le monde a vu ce jeton et on peut peut-être arrêter la propagation
@@ -124,20 +157,23 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
                log("App is now completed, sending END to everyone");
 
                try {
-                  // On indique la terminaison de l'application
-                  Message.EndMessage endMessage = new Message.EndMessage(localHostIndex);
+                  // On indique la terminaison de l'application au site suivant
+                  EndMessage endMessage = new EndMessage(localHostIndex);
                   this.udpMessageHandler.sendTo(endMessage, getNextSite());
                } catch (IOException ex) {
-                  Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+                  Logger.getLogger(DynamicThreadManager.class.getName())
+                     .log(Level.SEVERE, null, ex);
                }
             } else {
-               // On termine nos taches
+               // On attend la fin des tâches afin de commencer la terminaison
                this.waitForTaskEnds();
 
+               // on transmet le jeton au site suivant
                try {
                   this.udpMessageHandler.sendTo(tokenMessage, getNextSite());
                } catch (IOException ex) {
-                  Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+                  Logger.getLogger(DynamicThreadManager.class.getName())
+                     .log(Level.SEVERE, null, ex);
                }
             }
 
@@ -145,14 +181,15 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
          case END:
             // L'application est terminée
             log("Application is terminated, shuting down");
-            Message.EndMessage endMessage = (Message.EndMessage) message;
+            EndMessage endMessage = (EndMessage) message;
 
             if (endMessage.getInitiator() != localHostIndex) {
                // On doit retransmettre le message
                try {
                   this.udpMessageHandler.sendTo(endMessage, getNextSite());
                } catch (IOException ex) {
-                  Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+                  Logger.getLogger(DynamicThreadManager.class.getName())
+                     .log(Level.SEVERE, null, ex);
                }
             } else {
                // On a déjà vu ce message (on est l'initiateur)
@@ -185,7 +222,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
             try {
                log("Sending task to other");
                // démarre un nouveau thread sur un autre site
-               udpMessageHandler.sendTo(new Message.StartTaskMessage(getRandomSiteTarget()), getNextSite());
+               udpMessageHandler.sendTo(new StartTaskMessage(getRandomSiteTarget()), getNextSite());
             } catch (IOException ex) {
                Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
             }
@@ -198,6 +235,10 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
       }
    }
 
+   /**
+    * On attend que toutes les tâches se terminent avant de poursuivre avec la
+    * terminaison
+    */
    private synchronized void waitForTaskEnds() {
       try {
          log("Terminating tasks");
@@ -211,12 +252,22 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
       }
    }
 
+   /**
+    * Permet d'obtenir un site cible parmi tous les hôtes sauf soi-même
+    *
+    * @return
+    */
    private byte getRandomSiteTarget() {
       byte site = (byte) ThreadLocalRandom.current().nextInt(hosts.length - 1);
 
       return (byte) (site >= localHostIndex ? site + 1 : site);
    }
 
+   /**
+    * nous donne le site suivant sur l'anneau
+    *
+    * @return
+    */
    private Site getNextSite() {
       return hosts[(localHostIndex + 1) % hosts.length];
    }
@@ -238,10 +289,11 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
          endingPhase = true;
          isInitiator = true;
 
+         // on attend la fin des tâches en cours
          this.waitForTaskEnds();
 
          try {
-            Message.TokenMessage m = new Message.TokenMessage(localHostIndex);
+            TokenMessage m = new TokenMessage(localHostIndex);
             this.udpMessageHandler.sendTo(m, getNextSite());
          } catch (IOException ex) {
             Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
@@ -257,28 +309,9 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
    }
 
    public static void main(String... args) {
-      /*
-		DynamicThreadManager[] managers = new DynamicThreadManager[4];
-		for (int i = 0; i < 4; i++) {
-			try {
-				managers[i] = new DynamicThreadManager((byte) i);
-				managers[i].initiateTask();
-			} catch (IOException ex) {
-				Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
-			}
-		}
 
-		System.out.println("Everyone has been created");
-		try {
-			Thread.sleep(20000);
-		} catch (InterruptedException ex) {
-			Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
-		}
-
-		managers[0].initiateTerminaison();
-       */
-
-      // Récupération du numéro de site
+      // Au lancement de l'application, on demande à l'utilisateur le
+      // numéro du site courant
       Scanner scanner = new Scanner(System.in);
       boolean ok = false;
       int host = 0;
@@ -300,7 +333,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
          }
       } while (!ok);
 
-      // Lancement du site
+      // On lance le manager
       DynamicThreadManager manager = null;
       try {
          manager = new DynamicThreadManager((byte) (host - 1));
@@ -310,7 +343,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
          System.exit(-1);
       }
 
-      // Menu
+      // Saisie utilisateur pour le site courant
       boolean exit = false;
       do {
          System.out.println("\t1. Lancer une tâche");

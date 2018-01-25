@@ -175,7 +175,11 @@ public abstract class Message {
 
 	/**
 	 * Représente le jeton de terminaison et contient celui qui a créé ce Jeton.
-    * On met cette information dans le jeton plutôt que dans
+    * On met cette information dans le jeton pour permettre à un site qui a émis
+    * un jeton de déterminer si le jeton reçu est bien le sien
+    * 
+    * Cela nous permet d'éviter que plusieurs jetons circulent pour garantir que
+    * tous les sites soient inactifs avant de terminer.
 	 */
 	public static class TokenMessage extends Message {
 
