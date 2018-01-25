@@ -1,7 +1,6 @@
 package ch.heigvd.prr.termination;
 
 import ch.heigvd.prr.termination.UDPMessageHandler.UDPMessageListener;
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketException;
 import java.nio.file.Files;

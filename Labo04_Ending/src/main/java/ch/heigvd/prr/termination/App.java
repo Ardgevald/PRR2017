@@ -3,8 +3,6 @@ package ch.heigvd.prr.termination;
 import java.io.IOException;
 import java.util.InputMismatchException;
 import java.util.Scanner;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Classe utilisée par le client qui utilise le Manager pour effectuer des tâches
