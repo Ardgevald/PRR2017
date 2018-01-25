@@ -45,7 +45,8 @@ public class UDPHandler implements Closeable {
 	 * @throws SocketException si il y a une problème lors de la création du
 	 * socket (l'adresse est-elle déjà utilisée ?)
 	 */
-	public UDPHandler(InetSocketAddress address, int maxMessageSize) throws SocketException {
+	public UDPHandler(InetSocketAddress address, int maxMessageSize)
+      throws SocketException {
 		this(new DatagramSocket(address), maxMessageSize);
 	}
 
@@ -133,7 +134,8 @@ public class UDPHandler implements Closeable {
 		 */
 		@Override
 		public void run() {
-			DatagramPacket packet = new DatagramPacket(new byte[maxMessageSize], maxMessageSize);
+			DatagramPacket packet = new DatagramPacket(
+            new byte[maxMessageSize], maxMessageSize);
 
 			do {
 				try {
@@ -141,13 +143,16 @@ public class UDPHandler implements Closeable {
 					socket.receive(packet);
 
 					// Emmiting an event
-					listeners.forEach(l -> l.dataReceived(packet.getData(), packet.getLength()));
+					listeners.forEach(
+                  l -> l.dataReceived(packet.getData(),packet.getLength()));
 				} catch (SocketException e) {
 					// Doing nothing, socket can be closed by others
 				} catch (IOException ex) {
-					Logger.getLogger(UDPHandler.class.getName()).log(Level.SEVERE, null, ex);
+					Logger.getLogger(UDPHandler.class.getName())
+                  .log(Level.SEVERE, null, ex);
 				}
-				// On boucle tant que le socket n'est pas fermé. C'est notre condition d'arrêt
+				// On boucle tant que le socket n'est pas fermé.
+            // C'est notre condition d'arrêt
 			} while (!socket.isClosed());
 		}
 

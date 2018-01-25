@@ -9,18 +9,40 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.InputMismatchException;
 import java.util.List;
-import java.util.Scanner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import ch.heigvd.prr.termination.Message.*;
 
 /**
+ * Cette classe permet de mettre en place un certain nombre de travailleurs répartis
+ * sur plusieurs sites dans une topologie en anneau.
  *
+ * Les travailleurs se passent du travail au besoin à l'aide de messages de requête.
+ *
+ * On peut également initier une terminaison de l'application répartie grâce à
+ * l'algorithme de terminaison avec Jeton.
+ *
+ * Pour cela, le site initiateur passe inactif et envoie un jeton et lorsqu'il le
+ * reçoit de nouveau, s'il est resté inactif, il initie la fermeture de
+ * l'application.
+ *
+ * Si le site est encore actif, il retransmet le jeton jusqu'à ce que les sites
+ * soient tous inactifs. Un site est actif au démarrage. S'il reçoit un jeton, il
+ * attend que les tâches soient terminées avant de passer inactif.
+ *
+ * Un site inactif qui reçoit du travail, même si ce travail ne lui est pas destiné,
+ * passe actif de manière à savoir qu'un site plus loin dans l'anneau est actif.
+ *
+ * Si un site qui a créé un jeton reçoit le jeton d'un autre site, on évite les
+ * problèmes en éliminant les jetons en trop pour s'assurer qu'un seul jeton puisse
+ * intitier la fermeture de l'application.
+ *
+ * Le message de fin est envoyé lorsque tous les sites sont inactifs et l'application
+ * se termine.
  */
-public class DynamicThreadManager implements UDPMessageListener, Closeable {
+public class DynamicThreadManager implements UDPMessageListener {
 
    private final int P = 49; // P entre 0 et 100
    private final int MINIMUM_WAIT = 5000;
@@ -99,11 +121,12 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
 
    /**
     * Permet de gérer la réception d'un message appelé par UDPMessageHandler
+    * Un seul message est traité à la fois
     *
     * @param message le message reçu
     */
    @Override
-   public void dataReceived(Message message) {
+   public synchronized void dataReceived(Message message) {
       switch (message.getMessageType()) {
          case START_TASK:
             StartTaskMessage startMessage = (StartTaskMessage) message;
@@ -183,35 +206,44 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
             log("Application is terminated, shuting down");
             EndMessage endMessage = (EndMessage) message;
 
+            /**
+             * Si on a déjà vu ce message (on est l'initiateur) On arrête simplement
+             * la propagation, on ne fait rien. On est le dernier à s'arrêter pour ne
+             * pas laisser trainer des message sur le réseau
+             */
             if (endMessage.getInitiator() != localHostIndex) {
-               // On doit retransmettre le message
+               // On doit retransmettre le message si on est pas l'initiateur
                try {
                   this.udpMessageHandler.sendTo(endMessage, getNextSite());
                } catch (IOException ex) {
                   Logger.getLogger(DynamicThreadManager.class.getName())
                      .log(Level.SEVERE, null, ex);
                }
-            } else {
-               // On a déjà vu ce message (on est l'initiateur)
-               // On arrête simplement la propagation, on ne fait rien
-               // On est resté up jusque là pour ne pas laisser trainer des
-               // message sur le réseau
             }
 
             System.exit(0);
       }
    }
 
+   /**
+    * Travailleur qui va effectuer la tâche demandée
+    */
    private class Task implements Runnable {
 
+      /**
+       * la tâche à effectuer
+       */
       @Override
       public void run() {
 
          log("Starting task");
+         // on simule le calcul avec une attente aléatoire
          try {
-            Thread.sleep(ThreadLocalRandom.current().nextInt(MINIMUM_WAIT, MAXIMUM_WAIT));
+            Thread.sleep(ThreadLocalRandom.current()
+               .nextInt(MINIMUM_WAIT, MAXIMUM_WAIT));
          } catch (InterruptedException ex) {
-            Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(DynamicThreadManager.class.getName())
+               .log(Level.SEVERE, null, ex);
             return;
          }
          log("Task completed");
@@ -222,12 +254,16 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
             try {
                log("Sending task to other");
                // démarre un nouveau thread sur un autre site
-               udpMessageHandler.sendTo(new StartTaskMessage(getRandomSiteTarget()), getNextSite());
+               udpMessageHandler.sendTo(
+                  new StartTaskMessage(getRandomSiteTarget()), getNextSite());
             } catch (IOException ex) {
-               Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+               Logger.getLogger(DynamicThreadManager.class.getName())
+                  .log(Level.SEVERE, null, ex);
             }
          }
 
+         // on se retire de la file des threads puisqu'on a terminé en notifiant
+         // le manager
          synchronized (DynamicThreadManager.this) {
             tasks.remove(this);
             DynamicThreadManager.this.notify();
@@ -248,7 +284,8 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
          log("Tasks terminated");
          running = false;
       } catch (InterruptedException ex) {
-         Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+         Logger.getLogger(DynamicThreadManager.class.getName())
+            .log(Level.SEVERE, null, ex);
       }
    }
 
@@ -264,7 +301,7 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
    }
 
    /**
-    * nous donne le site suivant sur l'anneau
+    * Ceci nous donne le site suivant sur l'anneau
     *
     * @return
     */
@@ -272,17 +309,19 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
       return hosts[(localHostIndex + 1) % hosts.length];
    }
 
-   @Override
-   public void close() throws IOException {
-      this.initiateTerminaison();
-      this.udpMessageHandler.close();
-   }
-
+   /**
+    * méthode pour les logs (affiche le numéro du site)
+    *
+    * @param message
+    */
    private void log(String message) {
       System.out.println(localHostIndex + ": " + message);
    }
 
    // --- APP interface ---
+   /**
+    * Méthode fournie au client pour initier une terminaison
+    */
    public synchronized void initiateTerminaison() {
       // on ne lance pas de terminaison si une terminaison est en cours
       if (!endingPhase) {
@@ -296,95 +335,19 @@ public class DynamicThreadManager implements UDPMessageListener, Closeable {
             TokenMessage m = new TokenMessage(localHostIndex);
             this.udpMessageHandler.sendTo(m, getNextSite());
          } catch (IOException ex) {
-            Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(DynamicThreadManager.class.getName())
+               .log(Level.SEVERE, null, ex);
          }
       }
    }
 
+   /**
+    * méthode fournie au client pour initier une tâche
+    */
    public synchronized void initiateTask() {
       // on interdit la création de nouvelles tâches si une terminaison est en cours
       if (!endingPhase) {
          this.newTask();
       }
    }
-
-   public static void main(String... args) {
-
-      // Au lancement de l'application, on demande à l'utilisateur le
-      // numéro du site courant
-      Scanner scanner = new Scanner(System.in);
-      boolean ok = false;
-      int host = 0;
-      do {
-         System.out.print("No de site courant: ");
-         try {
-            host = scanner.nextInt();
-
-            if (host > 4 || host < 1) {
-               throw new IndexOutOfBoundsException();
-            }
-
-            ok = true;
-         } catch (IndexOutOfBoundsException e) {
-            System.out.println("No de site incorrecte, réessayer");
-         } catch (InputMismatchException e) {
-            System.out.println("Veuillez saisir un nombre");
-            scanner.nextLine();
-         }
-      } while (!ok);
-
-      // On lance le manager
-      DynamicThreadManager manager = null;
-      try {
-         manager = new DynamicThreadManager((byte) (host - 1));
-      } catch (IOException ex) {
-         System.err.println("Problème lors de la création du manager");
-         ex.printStackTrace();
-         System.exit(-1);
-      }
-
-      // Saisie utilisateur pour le site courant
-      boolean exit = false;
-      do {
-         System.out.println("\t1. Lancer une tâche");
-         System.out.println("\t2. Initier la terminaison");
-         System.out.println("Entrer le numéro correspondant à l'action voulue: ");
-
-         try {
-            int num = scanner.nextInt();
-
-            if (num > 2 || num < 1) {
-               throw new IndexOutOfBoundsException();
-            }
-
-            // Handling menu action
-            switch (num) {
-               case 1:
-                  System.out.println("Lancement d'une nouvelle tâche");
-                  manager.initiateTask();
-                  break;
-               case 2:
-                  System.out.println("Demande de terminaison");
-                  manager.initiateTerminaison();
-                  break;
-            }
-
-         } catch (IndexOutOfBoundsException e) {
-            System.out.println("No incorrecte, réessayer");
-         } catch (InputMismatchException e) {
-            System.out.println("Veuillez saisir un nombre");
-            scanner.nextLine();
-         }
-      } while (!exit);
-
-      try {
-         // On quitte, on ferme les connexion
-         manager.close();
-         scanner.close();
-      } catch (IOException ex) {
-         Logger.getLogger(DynamicThreadManager.class.getName()).log(Level.SEVERE, null, ex);
-      }
-
-   }
-
 }

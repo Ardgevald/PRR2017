@@ -96,7 +96,8 @@ public class UDPMessageHandler extends UDPHandler implements UDPListener {
 	 * message
 	 * @throws IOException si il y a eu un problème lors de l'envoi du message
 	 */
-	public void sendTo(Message message, InetSocketAddress address) throws IOException {
+	public void sendTo(Message message, InetSocketAddress address)
+      throws IOException {
 		this.sendTo(message.toByteArray(), address);
 	}
 
