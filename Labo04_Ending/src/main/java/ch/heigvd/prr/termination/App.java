@@ -46,6 +46,8 @@ public class App {
       }
 
       // Saisie utilisateur pour le site courant
+      // redemandé après demande de terminaison pour tester l'interdiction
+      // de lancer de nouvelles tâches
       boolean exit = false;
       do {
          System.out.println("\t1. Lancer une tâche");
